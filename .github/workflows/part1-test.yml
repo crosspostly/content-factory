@@ -1,0 +1,96 @@
+name: 🎯 Part 1 MVP Test
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Можно запустить вручную
+    inputs:
+      mode:
+        description: 'Generation mode'
+        required: true
+        default: 'shorts'
+        type: choice
+        options:
+          - shorts
+          - long_form
+          - ad
+      project:
+        description: 'Project name'
+        required: true
+        default: 'youtube_horoscope'
+      dry_run:
+        description: 'Dry run (no upload)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  test_part1:
+    runs-on: ubuntu-latest
+    name: Generate Content (Part 1 MVP)
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt 2>/dev/null || echo "No requirements.txt, skipping"
+      
+      - name: 🎬 Generate Content (Mode: ${{ github.event.inputs.mode || 'shorts' }})
+        run: |
+          python -m core.orchestrators.pipeline_orchestrator \
+            --project ${{ github.event.inputs.project || 'youtube_horoscope' }} \
+            --mode ${{ github.event.inputs.mode || 'shorts' }} \
+            ${{ (github.event.inputs.dry_run == 'true' && '--dry-run') || '--upload' }}
+        env:
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      
+      - name: 📊 Check Output Artifacts
+        if: always()
+        run: |
+          echo "📁 Generated Scripts:"
+          find output/scripts -name "*.json" 2>/dev/null | head -5 || echo "No scripts generated"
+          
+          echo "\n📁 Generated Audio:"
+          find output/audio -name "*.wav" 2>/dev/null | head -5 || echo "No audio generated"
+          
+          echo "\n📁 Generated Videos:"
+          find output/videos -name "*.mp4" 2>/dev/null | head -5 || echo "No videos generated"
+      
+      - name: 📤 Upload Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-factory-output
+          path: |
+            output/scripts/
+            output/audio/
+            output/videos/
+            output/logs/
+          retention-days: 7
+      
+      - name: ✅ Success Notification
+        if: success()
+        run: echo "✅ Part 1 MVP Test PASSED!"
+      
+      - name: ❌ Failure Notification
+        if: failure()
+        run: |
+          echo "❌ Part 1 MVP Test FAILED!"
+          echo "Check logs in Actions tab"
+          exit 1
