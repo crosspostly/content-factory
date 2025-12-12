@@ -1,0 +1,47 @@
+name: Test Qwen Token (Simple)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Python deps
+        run: pip install requests
+      
+      - name: Test Qwen Token
+        env:
+          QWEN_REFRESH_TOKEN: ${{ secrets.QWEN_REFRESH_TOKEN }}
+        run: |
+          python3 << 'EOF'
+          import requests
+          import os
+          
+          token = os.getenv('QWEN_REFRESH_TOKEN')
+          print(f"Token received: {token[:10] if token else 'EMPTY'}...")
+          
+          if not token:
+              print("ERROR: Token is empty!")
+              exit(1)
+          
+          print("Sending request to Qwen...")
+          response = requests.post(
+              "https://qwenlm.auth0.com/oauth/token",
+              json={
+                  "grant_type": "refresh_token",
+                  "client_id": "NqOqg6X7O1OjN1l2vUqaEflnYF0xkW6q",
+                  "client_secret": "",
+                  "refresh_token": token,
+                  "scope": "offline_access"
+              }
+          )
+          
+          print(f"Status Code: {response.status_code}")
+          print(f"Response: {response.text[:500]}")
+          
+          if response.status_code == 200:
+              print("SUCCESS! Token works!")
+          else:
+              print(f"FAILED with {response.status_code}")
+          EOF
