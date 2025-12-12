@@ -6,7 +6,7 @@ on:
       task:
         description: 'Task for Qwen Code'
         required: true
-        default: 'Analyze and summarize this repository structure'
+        default: 'Analyze and summarize this repository'
 
 jobs:
   qwen:
@@ -20,15 +20,35 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Cache Ollama models
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama
+          key: ollama-qwen-${{ runner.os }}
+          restore-keys: ollama-qwen-
+
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.ai/install.sh | sh
+          # Start Ollama in background
+          ollama serve &
+          sleep 3
+
+      - name: Pull Qwen Model
+        run: |
+          # Use smaller 1.5B model to fit in GitHub Actions (7GB limit)
+          ollama pull qwen2.5-coder:1.5b
+          sleep 2
+
       - name: Install Qwen Code
         run: npm install -g @qwen-code/qwen-code@latest
 
       - name: Run Qwen Code Task
         env:
-          # OpenRouter API (free tier: 1000 requests/month)
-          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENAI_BASE_URL: 'https://openrouter.ai/api/v1'
-          OPENAI_MODEL: 'qwen/qwen2.5-coder-32b-instruct'
+          # Point to local Ollama API
+          OPENAI_API_KEY: 'local'
+          OPENAI_BASE_URL: 'http://localhost:11434/v1'
+          OPENAI_MODEL: 'qwen2.5-coder:1.5b'
         run: |
-          echo "Running Qwen Code with OpenRouter..."
+          echo "Running Qwen Code with local Ollama..."
           echo "${{ github.event.inputs.task }}" | qwen --yolo
