@@ -1,0 +1,13 @@
+name: Test Auto-Fix Trigger
+
+on: [workflow_dispatch]
+
+jobs:
+  trigger-failure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Intentional failure to test auto-fix agent
+        run: |
+          echo "🔨 Testing auto-fix agent..."
+          echo "This workflow will fail to trigger the auto-fix agent"
+          exit 1
