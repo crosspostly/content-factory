@@ -25,13 +25,10 @@ jobs:
 
       - name: Run Qwen Code Task
         env:
-          # Use OpenAI-compatible API mode for CI/CD environments
-          OPENAI_API_KEY: ${{ secrets.QWEN_REFRESH_TOKEN }}
-          OPENAI_BASE_URL: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-          OPENAI_MODEL: 'qwen3-coder-plus'
+          # OpenRouter API (free tier: 1000 requests/month)
+          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_BASE_URL: 'https://openrouter.ai/api/v1'
+          OPENAI_MODEL: 'qwen/qwen2.5-coder-32b-instruct'
         run: |
-          # Run Qwen Code in YOLO mode (non-interactive)
-          # The CLI automatically uses OpenAI-compatible API when these env vars are set
-          qwen --yolo << 'EOF'
-          ${{ github.event.inputs.task }}
-          EOF
+          echo "Running Qwen Code with OpenRouter..."
+          echo "${{ github.event.inputs.task }}" | qwen --yolo
