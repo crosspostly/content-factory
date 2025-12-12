@@ -6,3 +6,14 @@
 # google-generativeai
 # openai
 # ollama
+
+# Part 2: TTS Generator
+edge-tts>=6.1.0
+pydub>=0.25.1
+python-dotenv>=1.0.0
+requests>=2.31.0
+
+# Part 3: Video Renderer
+moviepy>=1.0.3
+ffmpeg-python>=0.2.1
+Pillow>=10.0.0
