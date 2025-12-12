@@ -8,29 +8,29 @@
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 
 ---
-#
 
-## 🚀 STATUS: Part 2 TTS Implementation 🔜
+## 🚀 STATUS: Part 2 + 3 Implementation (Edge-TTS + Video)
 
-### Current Phase: **Edge-TTS + Video Rendering**
-
-✅ **COMPLETED:**
-- [x] Config loader (stdlib YAML parser - zero dependencies!)
-- [x] LLM routing (Gemini → Ollama → OpenRouter with fallbacks)
-- [x] Pipeline orchestrator (CLI interface, dry-run mode)
-- [x] Logging & error handling (file + console + Telegram alerts)
-- [x] Script generator with file saving ✅
-- [x] GitHub Actions workflow (fixed YAML syntax)
+✅ **COMPLETED (Part 1):**
+- [x] Config loader (stdlib YAML parser)
+- [x] LLM routing (Gemini + fallbacks)
+- [x] Pipeline orchestrator (CLI)
+- [x] Script generator + file saving
+- [x] GitHub Actions workflow
 
 🔜 **IN PROGRESS (Part 2 + 3):**
-- [ ] TTS Generator (Edge-TTS integration) — реальное создание аудио
-- [ ] Video Renderer (moviepy + ffmpeg) — композиция видео
-- [ ] Pixabay/Pexels API интеграция — стоки видео
+- Edge-TTS integration (ru-RU-DariyaNeural)
+- moviepy video rendering
+- Pixabay API for background videos
 
-❌ **TODO (Part 4 + 5):**
-- [ ] YouTube/TikTok/VK uploaders
-- [ ] Scheduling & automation
-- [ ] Real LLM script generation (Part 3)
+---
+
+## 📖 DOCUMENTATION
+
+**START HERE:**
+
+1. **[QUICK-START.md](./QUICK-START.md)** - 5-min setup guide
+2. **[PART2_PART3_CRITICAL_TZ.md](./PART2_PART3_CRITICAL_TZ.md)** - Technical spec for AI agent
 
 ---
 
@@ -70,279 +70,142 @@
 
 ---
 
-## 📋 QUICK START
+## 🔐 GitHub Secrets (Required)
 
-### Setup (5 мин)
+**For Part 2 + 3:**
+
+| Secret | Value | Source |
+|--------|-------|--------|
+| `GOOGLE_AI_API_KEY` | API Key | [ai.google.dev](https://ai.google.dev) |
+| `OPENROUTER_API_KEY` | API Key | [openrouter.ai](https://openrouter.ai) (fallback) |
+| `PIXABAY_API_KEY` | API Key | [pixabay.com/api](https://pixabay.com/api) |
+| `TELEGRAM_BOT_TOKEN` | Token | [@BotFather](https://t.me/BotFather) |
+| `TELEGRAM_CHAT_ID` | Chat ID | [@userinfobot](https://t.me/userinfobot) |
+
+**Setup:**
+Settings → Secrets and variables → Actions → New repository secret
+
+---
+
+## 🎯 Google Gemini Models (Dec 2025)
+
+**ACTUAL (Not Deprecated):**
+
+| Model | Code | Best For |
+|-------|------|----------|
+| Gemini 2.5 Flash | `gemini-2.5-flash` | **RECOMMENDED** - fast, balanced |
+| Gemini 2.5 Flash-Lite | `gemini-2.5-flash-lite` | Cost-optimized |
+| Gemini 2.5 Pro | `gemini-2.5-pro` | Complex reasoning |
+| Gemini 3 Pro Preview | `gemini-3-pro-preview` | Newest (experimental) |
+
+**NOT SUPPORTED (Deprecated/Removed):**
+- ❌ `gemini-2.0-flash` (shutdown Feb 2026)
+- ❌ `gemini-1.5-flash` (retired April 2025)
+- ❌ `gemini-1.5-pro` (retired April 2025)
+- ❌ `gemini-exp-1206` (never existed)
+- ❌ `gemini-2.0-flash-exp` (removed from API)
+
+Source: [ai.google.dev/gemini-api/docs/models](https://ai.google.dev/gemini-api/docs/models)
+
+---
+
+## 📋 Quick Start
 
 ```bash
-# 1. Clone repo
+# 1. Clone
 git clone https://github.com/crosspostly/content-factory.git
 cd content-factory
 
-# 2. Install dependencies
+# 2. Install
 pip install -r requirements.txt
 
-# 3. Create .env file
+# 3. Configure
 cp .env.example .env
-# Edit .env with your API keys
+# Add your API keys to .env
 
-# 4. Run dry-run test
+# 4. Test
 python -m core.orchestrators.pipeline_orchestrator \
   --project youtube_horoscope \
   --mode shorts \
   --dry-run
-```
 
-### Full Pipeline
-
-```bash
-# Generate shorts with all steps: script → audio → video
+# 5. Generate
 python -m core.orchestrators.pipeline_orchestrator \
   --project youtube_horoscope \
   --mode shorts
-
-# Generate long-form
-python -m core.orchestrators.pipeline_orchestrator \
-  --project youtube_horoscope \
-  --mode long_form
-
-# Check output
-ls -lah output/videos/youtube_horoscope/
-ls -lah output/audio/youtube_horoscope/
 ```
 
 ---
 
-## 🔐 GitHub Secrets (Требуемые)
-
-### ОБЯЗАТЕЛЬНЫЕ для Part 2 + 3
-
-| Secret Name | Значение | Где получить | Для чего |
-|------------|---------|-------------|----------|
-| `GOOGLE_AI_API_KEY` | API Key | [ai.google.dev](https://ai.google.dev) | Gemini LLM (текст скриптов) |
-| `OPENROUTER_API_KEY` | API Key | [openrouter.ai](https://openrouter.ai) | Fallback LLM (если Gemini недоступен) |
-| `PIXABAY_API_KEY` | API Key | [pixabay.com/api](https://pixabay.com/api) | Стоки видео для shorts/фона |
-| `TELEGRAM_BOT_TOKEN` | Token | [@BotFather](https://t.me/BotFather) в Telegram | Уведомления об ошибках |
-| `TELEGRAM_CHAT_ID` | Chat ID | [@userinfobot](https://t.me/userinfobot) в Telegram | Куда отправлять уведомления |
-
-### ОПЦИОНАЛЬНЫЕ для Part 4 (YouTube/TikTok/VK)
-
-| Secret Name | Значение | Где получить | Для чего |
-|------------|---------|-------------|----------|
-| `YOUTUBE_API_KEY` | API Key | Google Cloud Console | YouTube upload |
-| `TIKTOK_ACCESS_TOKEN` | Token | TikTok Developer | TikTok upload |
-| `VK_SERVICE_TOKEN` | Token | VK App Admin | VK upload |
-| `INSTAGRAM_ACCESS_TOKEN` | Token | Meta Developer | Instagram upload |
-
-### Как добавить Secrets
-
-1. Перейти: **Settings → Secrets and variables → Actions**
-2. Нажать **"New repository secret"**
-3. Заполнить Name и Value для каждого secret
-4. После добавления автоматически доступны в `${{ secrets.SECRET_NAME }}`
-
----
-
-## 🎬 Project Structure
+## 📁 Project Structure
 
 ```
 content-factory/
 ├── core/
-│   ├── orchestrators/
-│   │   ├── __main__.py
-│   │   └── pipeline_orchestrator.py
 │   ├── generators/
-│   │   ├── script_generator.py       ✅ DONE
-│   │   ├── tts_generator.py          🔜 IN PROGRESS (Edge-TTS)
-│   │   └── video_renderer.py         🔜 IN PROGRESS (moviepy)
+│   │   ├── script_generator.py        ✅ DONE
+│   │   ├── tts_generator.py           🔜 Edge-TTS
+│   │   └── video_renderer.py          🔜 moviepy
+│   ├── orchestrators/
+│   │   └── pipeline_orchestrator.py   ✅ DONE
 │   └── utils/
 │       ├── config_loader.py
 │       ├── model_router.py
-│       ├── yaml_loader.py
 │       └── secrets_manager.py
 ├── projects/
 │   └── youtube_horoscope/
-│       ├── config.yaml              ✅ Russian voice configured
+│       ├── config.yaml
 │       ├── prompts/
-│       │   ├── shorts_scenario.txt
-│       │   ├── long_form_scenario.txt
-│       │   └── ad_script.txt
 │       └── content_plan.json
 ├── .github/workflows/
-│   └── part1-test.yml               ✅ Fixed YAML syntax
+│   └── part1-test.yml
 ├── requirements.txt
-├── .env.example
-└── output/                          (auto-created)
-    ├── scripts/
-    ├── audio/
-    ├── videos/
-    └── logs/
-```
-
----
-
-## 📝 Configuration
-
-### `projects/youtube_horoscope/config.yaml`
-
-```yaml
-project:
-  name: youtube_horoscope
-  language: Russian
-  niche: astrology
-
-generation:
-  primary_model: "gemini-2.5-flash-lite"        # ✅ Актуальная модель Dec 2025
-  fallback_models:
-    - "gemini-2.5-flash"                   # Экспериментальная
-  temperature: 0.8
-  max_retries: 3
-
-audio:
-  enabled: true
-  engines:
-    edge-tts:
-      enabled: true
-      voice: "ru-RU-DariyaNeural"          # Русский женский голос (бесплатный!)
-      speed: 1.0
-    gemini-tts:
-      enabled: false
-
-video:
-  fps: 30
-  codec: libx264
-  audio_codec: aac
-  quality: high
-  shorts:
-    width: 1080
-    height: 1920                           # Vertical 9:16
-    preferred_source: pixabay_video
-  long_form:
-    width: 1920
-    height: 1080                           # Horizontal 16:9
-
-subtitles:
-  enabled: true
-  font: Arial
-  font_size: 24
-  color: white
-```
-
-## 📊 Output Files
-
-После запуска pipeline создаются:
-
-```
-output/
-├── scripts/youtube_horoscope/20251212/
-│   ├── short_a1b2c3d4.json
-│   ├── long_form_x9y8z7w6.json
-│   └── ad_p1q2r3s4.json
-│
-├── audio/youtube_horoscope/
-│   ├── shorts_main.wav            (22050 Hz, mono)
-│   ├── long_form_love.wav
-│   ├── long_form_money.wav
-│   ├── long_form_health.wav
-│   └── ad_main.wav
-│
-└── videos/youtube_horoscope/
-    ├── shorts.mp4                 (1080x1920, 30fps, H.264)
-    ├── long_form.mp4              (1920x1080, 30fps, H.264)
-    └── ad.mp4                     (1080x1920, 30fps, H.264)
+├── QUICK-START.md                    ← START HERE
+├── PART2_PART3_CRITICAL_TZ.md         ← For AI agent
+└── output/                            (auto-created)
 ```
 
 ---
 
 ## 🧪 Testing
 
-### Part 1 (Script Generator) — Already Working ✅
-
 ```bash
+# Part 1 (Script generation) - Working ✅
 python -c "
-from core.utils.config_loader import load_project_config
 from core.generators.script_generator import generate_short
+from core.utils.config_loader import load_project_config
 
 config = load_project_config('youtube_horoscope')
 script = generate_short(config)
-print('✅ Script generated:', script['_script_path'])
+print('✅ Script generated')
 "
-```
 
-### Part 2 (TTS) — In Progress 🔜
+# Part 2 (TTS) - In progress 🔜
+# See QUICK-START.md for testing
 
-```bash
-python -c "
-from core.utils.config_loader import load_project_config
-from core.generators.script_generator import generate_short
-from core.generators.tts_generator import synthesize
-
-config = load_project_config('youtube_horoscope')
-script = generate_short(config)
-audio = synthesize(config, script, 'shorts')
-print('✅ TTS:', audio['blocks']['main'])
-print('Duration:', audio['total_duration_sec'], 'sec')
-"
-```
-
-### Full Pipeline
-
-```bash
-python -m core.orchestrators.pipeline_orchestrator \
-  --project youtube_horoscope \
-  --mode shorts \
-  --dry-run
-
-# Check results
-ls -lah output/
+# Part 3 (Video) - In progress 🔜
+# See QUICK-START.md for testing
 ```
 
 ---
 
-## 🔧 Troubleshooting
+## 🔗 Links
 
-### Edge-TTS не работает
-
-```bash
-# Проверить установку
-pip install edge-tts==6.1.0
-
-# Тест
-python -c "import edge_tts; print('✅ edge-tts installed')"
-```
-
-### Gemini API ошибка (401/403)
-
-```bash
-# Проверить ключ
-echo $GOOGLE_AI_API_KEY
-
-# Переполучить с https://ai.google.dev/
-```
-
-### GitHub Actions падает
-
-1. Проверить `.github/workflows/part1-test.yml` синтаксис
-2. Убедиться все secrets добавлены
-3. Смотреть Actions tab → logs
-
----
-
-## 📚 Documentation
-
-- **FULL-IMPLEMENTATION-TZ.md** — Полное техническое задание для Part 2 + 3
-- **QUICK-START.md** — Быстрый старт
-- **GITHUB-SECRETS-GUIDE.md** — Гайд по секретам
+- **API Docs:** [ai.google.dev](https://ai.google.dev)
+- **Models List:** [ai.google.dev/gemini-api/docs/models](https://ai.google.dev/gemini-api/docs/models)
+- **Deprecations:** [ai.google.dev/gemini-api/docs/deprecations](https://ai.google.dev/gemini-api/docs/deprecations)
+- **Edge-TTS:** [github.com/rany2/edge-tts](https://github.com/rany2/edge-tts)
+- **moviepy:** [zulko.github.io/moviepy](https://zulko.github.io/moviepy)
 
 ---
 
 ## 📞 Support
 
-- **Проблема?** Смотри логи: `output/logs/{project}/{date}.log`
-- **Вопрос?** Открой Issue
-- **PR?** Добро пожаловать! 🚀
+- **Issue?** Check `output/logs/`
+- **Question?** Open an issue
+- **PR?** Welcome! 🚀
 
 ---
 
-**Status:** 🔜 Part 2 TTS Implementation In Progress  
-**Next:** Merge Part 2 + 3 → Part 4 YouTube upload → Part 5 Scheduling
+**Status:** 🔜 Part 2 TTS + Part 3 Video In Progress  
+**Last Update:** Dec 12, 2025 (Gemini models verified from official docs)
