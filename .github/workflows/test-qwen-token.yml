@@ -12,45 +12,37 @@ jobs:
       
       - name: Test Qwen Token
         env:
-          QWEN_ACCESS_TOKEN: ${{ secrets.QWEN_REFRESH_TOKEN }}
+          QWEN_API_KEY: ${{ secrets.QWEN_REFRESH_TOKEN }}
         run: |
           python3 << 'EOF'
           import requests
           import os
-          import json
           
-          token = os.getenv('QWEN_ACCESS_TOKEN')
-          print(f"Token: {token[:10]}...")
+          api_key = os.getenv('QWEN_API_KEY')
+          print(f"API Key: {api_key[:10]}...")
           
-          if not token:
-              print("ERROR: Token is empty!")
+          if not api_key:
+              print("ERROR: API Key is empty!")
               exit(1)
           
-          # Try different endpoints
-          endpoints = [
-              ("DashScope Intl Models", "https://dashscope-intl.aliyuncs.com/api/v1/models"),
-              ("DashScope CN Models", "https://dashscope.aliyuncs.com/api/v1/models"),
-              ("Qwen API Text", "https://qwenlm.aliyun.com/api/v1/text/generate"),
-          ]
+          print("\n🔍 Testing Qwen DashScope API with X-DashScope-ApiKey header...")
           
-          for name, url in endpoints:
-              print(f"\n📌 Testing: {name}")
-              print(f"   URL: {url}")
-              try:
-                  response = requests.get(
-                      url,
-                      headers={
-                          "Authorization": f"Bearer {token}",
-                          "Content-Type": "application/json"
-                      },
-                      timeout=5
-                  )
-                  print(f"   Status: {response.status_code}")
-                  if response.text:
-                      print(f"   Response: {response.text[:200]}")
-                  if response.status_code == 200:
-                      print(f"   ✅ THIS WORKS!")
-              except Exception as e:
-                  print(f"   ❌ Error: {e}")
+          # This is the correct way to use Qwen API
+          response = requests.get(
+              "https://dashscope.aliyuncs.com/api/v1/models",
+              headers={
+                  "X-DashScope-ApiKey": api_key,
+                  "Content-Type": "application/json"
+              }
+          )
           
+          print(f"Status Code: {response.status_code}")
+          print(f"Response: {response.text[:500]}")
+          
+          if response.status_code == 200:
+              print("\n✅ SUCCESS! Qwen API works with this token!")
+              exit(0)
+          else:
+              print(f"\n❌ Failed with {response.status_code}")
+              exit(1)
           EOF
