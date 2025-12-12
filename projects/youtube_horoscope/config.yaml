@@ -34,7 +34,7 @@ audio:
   engines:
     edge-tts:
       enabled: true
-      voice: en-US-AriaNeural
+      voice: ru-RU-DariyaNeural
       speed: 1.0
     gemini-tts:
       enabled: false
