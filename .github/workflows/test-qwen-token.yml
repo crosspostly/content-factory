@@ -17,30 +17,40 @@ jobs:
           python3 << 'EOF'
           import requests
           import os
+          import json
           
           token = os.getenv('QWEN_ACCESS_TOKEN')
-          print(f"Token received: {token[:10] if token else 'EMPTY'}...")
+          print(f"Token: {token[:10]}...")
           
           if not token:
               print("ERROR: Token is empty!")
               exit(1)
           
-          print("Testing Qwen API with Bearer token...")
+          # Try different endpoints
+          endpoints = [
+              ("DashScope Intl Models", "https://dashscope-intl.aliyuncs.com/api/v1/models"),
+              ("DashScope CN Models", "https://dashscope.aliyuncs.com/api/v1/models"),
+              ("Qwen API Text", "https://qwenlm.aliyun.com/api/v1/text/generate"),
+          ]
           
-          # Test with Qwen API - example: list models
-          response = requests.get(
-              "https://dashscope-intl.aliyuncs.com/api/v1/models",
-              headers={
-                  "Authorization": f"Bearer {token}",
-                  "Content-Type": "application/json"
-              }
-          )
+          for name, url in endpoints:
+              print(f"\n📌 Testing: {name}")
+              print(f"   URL: {url}")
+              try:
+                  response = requests.get(
+                      url,
+                      headers={
+                          "Authorization": f"Bearer {token}",
+                          "Content-Type": "application/json"
+                      },
+                      timeout=5
+                  )
+                  print(f"   Status: {response.status_code}")
+                  if response.text:
+                      print(f"   Response: {response.text[:200]}")
+                  if response.status_code == 200:
+                      print(f"   ✅ THIS WORKS!")
+              except Exception as e:
+                  print(f"   ❌ Error: {e}")
           
-          print(f"Status Code: {response.status_code}")
-          print(f"Response: {response.text[:500]}")
-          
-          if response.status_code == 200:
-              print("✅ SUCCESS! Token works with Qwen API!")
-          else:
-              print(f"❌ FAILED with {response.status_code}")
           EOF
