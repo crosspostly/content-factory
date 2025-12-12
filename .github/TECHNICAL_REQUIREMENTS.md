@@ -29,6 +29,177 @@
 - ✅ 45/45 tests passing
 - **Coverage:** 35% (acceptable for MVP)
 
+### 4. Auto-Fix Agent ✅ NEW!
+- **Status:** DEPLOYED & READY
+- Automatically analyzes workflow failures
+- Creates GitHub issues with technical tasks
+- Optionally auto-commits fixes (configurable)
+- Uses Gemini 2.5 for analysis
+
+---
+
+## 🤖 AUTO-FIX AGENT (NEW FEATURE)
+
+### How It Works
+
+```
+[Workflow Fails]
+        ↓
+[GitHub Actions triggers auto-fix-agent.yml]
+        ↓
+[Fetches workflow logs]
+        ↓
+[Gemini 2.5 analyzes error]
+        ↓
+[Creates detailed GitHub Issue]
+        ↓
+[IF auto-fix enabled in config]
+  → Auto-commits fix to repo
+[ELSE]
+  → Manual review required
+```
+
+### Configuration File
+
+**Location:** `.github/auto-fix-config.yml`
+
+```yaml
+auto_fix:
+  # MAIN SWITCH: Enable/disable auto-commit
+  auto_commit: false  # ← Change to 'true' to enable auto-fixes!
+  
+  # Create GitHub issues
+  create_issue: true
+  
+  # Minimum severity to trigger fix
+  min_severity: medium  # critical, high, medium, low
+  
+  # Only fix on these branches
+  allowed_branches:
+    - main
+    - develop
+  
+  # Gemini model to use
+  model: gemini-2.5-flash
+```
+
+### Enable Auto-Fix in 2 Steps
+
+**Step 1:** Edit `.github/auto-fix-config.yml`
+```yaml
+auto_fix:
+  auto_commit: true  # ← Change this!
+```
+
+**Step 2:** Push to main
+```bash
+git add .github/auto-fix-config.yml
+git commit -m "Enable auto-fix agent"
+git push origin main
+```
+
+**Done!** Next workflow failure will be auto-fixed. ✨
+
+### What the Agent Does
+
+#### 1. Analyzes Failure
+- Reads GitHub Actions logs
+- Uses Gemini to understand the error
+- Identifies root cause
+
+#### 2. Creates GitHub Issue
+- **Title:** 🔴 [CRITICAL] Error description
+- **Body:**
+  - Problem description
+  - Root cause analysis
+  - Severity level (critical/high/medium/low)
+  - Solution steps
+  - Suggested code fix
+  - Link to failing workflow run
+
+#### 3. Auto-Commits (If Enabled)
+- Applies Gemini's suggested code fix
+- Creates git commit with message
+- Pushes to original branch
+- Closes related issues automatically
+
+### Example Workflow
+
+**Test fails:**
+```
+FAILED tests/test_tts_generator.py::TestSynthesizeModes::test_synthesize_shorts
+ValueError: Missing required parameter 'api_key'
+```
+
+**Auto-Fix Agent (1 minute later):**
+
+1. ✅ **Creates Issue:**
+   ```
+   Title: 🔴 [HIGH] TTS Generator missing API key parameter
+   
+   Problem: Test fails because api_key parameter not passed
+   Root Cause: Refactoring missed one function call
+   
+   Solution:
+   - Add api_key parameter to synthesize() call
+   - Update test fixtures
+   
+   Code Fix:
+   result = tts_generator.synthesize(
+     config,
+     script,
+     mode,
+     api_key=api_key  # ← Added this
+   )
+   ```
+
+2. 🔧 **Auto-commits (if enabled):**
+   ```
+   [auto-fix-agent] Fix TTS Generator: missing api_key parameter
+   
+   - Add api_key parameter to synthesize() calls
+   - Update test fixtures to pass real API key
+   - All tests now pass
+   ```
+
+### Gemini Analysis Output
+
+Each run generates detailed analysis:
+
+```json
+{
+  "problem": "Test fails due to missing api_key parameter",
+  "root_cause": "Function signature changed but call sites not updated",
+  "severity": "high",
+  "solution_steps": [
+    "Identify all synthesize() calls",
+    "Add api_key parameter",
+    "Run tests to verify"
+  ],
+  "code_fix": "result = tts_generator.synthesize(config, script, mode, api_key=api_key)",
+  "file_to_modify": "tests/test_tts_generator.py",
+  "suggested_commit_message": "Fix TTS Generator: missing api_key parameter",
+  "auto_fix_possible": true
+}
+```
+
+### Safety Features
+
+✅ **Default: Safe Mode**
+- Auto-fix is DISABLED by default
+- Issues created with manual review required
+- No automatic commits
+
+✅ **Controlled Enable**
+- Must explicitly set `auto_commit: true` in config
+- Only works on specified branches (default: main, develop)
+- Minimum severity threshold (default: medium)
+
+✅ **Audit Trail**
+- Every auto-fix creates a GitHub Issue (for review)
+- Commits include `[auto-fix-agent]` tag
+- Analysis saved to artifacts
+
 ---
 
 ## 🔧 REQUIREMENTS TO IMPLEMENT
@@ -58,148 +229,40 @@ sudo apt-get install -y ffmpeg imagemagick  # Takes 30 seconds EVERY RUN
 
 #### 2. Docker Image for CI/CD
 
-**Create `Dockerfile` in repo root:**
-
-```dockerfile
-FROM ubuntu:24.04
-LABEL maintainer="Pavel Shekhov <shekhovpavel@gmail.com>"
-LABEL description="Content Factory runtime environment"
-
-# Avoid interactive prompts
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 \
-    python3-pip \
-    ffmpeg \
-    imagemagick \
-    ghostscript \
-    fonts-dejavu-core \
-    ca-certificates \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
-
-# Set Python 3.11 as default
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-
-# Set working directory
-WORKDIR /app
-
-# Copy requirements
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY . .
-
-# Run tests by default
-CMD ["python", "-m", "pytest", "-v"]
-```
-
-**Expected Result:**
-- Zero apt installation time in CI/CD
-- Consistent environment across local/CI/CD
-- ~5 minute build time (one-time)
+**Create `Dockerfile` in repo root**
+- Zero apt installation time
+- Consistent environment
+- Pre-install: Python 3.11, ffmpeg, imagemagick, fonts
 
 ### Priority 2: BUILD AUTOMATION (Next 48 hours)
 
 #### 1. Docker Build Workflow
 
-**Create `.github/workflows/build-docker.yml`:**
+**Create `.github/workflows/build-docker.yml`**
+- Builds Docker image on changes
+- Pushes to GitHub Container Registry
+- Uses buildx for caching
 
-```yaml
-name: Build and Push Docker Image
+#### 2. Update Main Workflow
 
-on:
-  push:
-    branches: [main]
-    paths: ['Dockerfile', 'requirements.txt', '.github/workflows/build-docker.yml']
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-```
-
-#### 2. Update Main Workflow to Use Docker
-
-**In `.github/workflows/main.yml`, replace apt-get with container:**
-
-```yaml
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/crosspostly/content-factory:latest
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      # No apt-get needed! All tools pre-installed in Docker image
-      
-      - name: Run tests
-        run: |
-          python -m pytest tests/ -v --cov=core
-        env:
-          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
-```
-
-**Expected Result:**
-- 30s saved per run (apt installation eliminated)
-- Consistent environment across all runs
-- Reproducible builds
+**Update `.github/workflows/main.yml`**
+- Use Docker container
+- Remove apt-get install
+- Saves 30 seconds per run
 
 ### Priority 3: OPTIMIZATION (Next week)
 
 #### 1. Performance Benchmarking
-
-```bash
-# Track build times
-# Target: < 3 minutes total (currently ~5-7 minutes)
-```
+- Target: < 3 minutes total (currently ~5-7 minutes)
 
 #### 2. Parallel Testing
-
 ```bash
-pytest -n auto  # Use pytest-xdist for parallel execution
+pytest -n auto  # Use pytest-xdist
 ```
 
 ---
 
-## 📋 ENVIRONMENT VARIABLES
+## 📝 ENVIRONMENT VARIABLES
 
 **GitHub Actions Secrets Required:**
 
@@ -211,53 +274,34 @@ TELEGRAM_CHAT_ID           ✅ Set (Notifications)
 GHCR_PAT                   ⚠️ Needed for Docker push (optional)
 ```
 
-**Local Development:**
-
-```bash
-# .env file (never commit!)
-GOOGLE_AI_API_KEY="your-api-key-here"
-PIXABAY_API_KEY="your-key-here"
-TELEGRAM_BOT_TOKEN="your-token-here"
-TELEGRAM_CHAT_ID="your-chat-id"
-```
-
 ---
 
 ## 📦 DEPENDENCIES
 
 ### System Dependencies
 ```bash
-# ffmpeg: Audio/video processing (7:6.1.1-3ubuntu5)
-ffmpeg
-
-# imagemagick: Image manipulation (6.9.12+)
-imagemagick
-
-# ghostscript: PDF rendering (10.02.1+)
-ghostscript
-
-# Fonts
+ffmpeg >= 6.1.1
+imagemagick >= 6.9.12
+ghostscript >= 10.02.1
 fonts-dejavu-core
 ```
 
-### Python Dependencies (see `requirements.txt`)
+### Python Dependencies
 ```
 google-generativeai==0.7.2   # Gemini API
-python-dotenv==1.0.1          # Environment variables
-pyyaml==6.0.2                 # Config parsing
-requests==2.31.0              # HTTP
-pydub==0.25.1                 # Audio processing
-moviepy==1.0.3                # Video editing (Part 2)
-pillow==10.2.0                # Image processing
-numpy==1.26.4                 # Numerical operations
-pytest==7.4.3                 # Testing
+python-dotenv==1.0.1
+pyyaml==6.0.2
+requests==2.31.0
+pydub==0.25.1
+moviepy==1.0.3
+pillow==10.2.0
+numpy==1.26.4
+pytest==7.4.3
 ```
 
 ---
 
 ## 📊 PERFORMANCE TARGETS
-
-### Build Time Breakdown
 
 | Step | Current | With apt cache | With Docker |
 |------|---------|----------------|-------------|
@@ -265,19 +309,15 @@ pytest==7.4.3                 # Testing
 | Python setup | 1s | 1s | 0s |
 | **apt install** | **30s** | **2s** | **0s** |
 | pip restore | 2s | 2s | 0s |
-| pip install | 10s | 0s (cached) | 0s |
+| pip install | 10s | 0s | 0s |
 | Tests | 5s | 5s | 5s |
 | **Total** | **~48s** | **~10s** | **~5s** |
 
-### Savings
-- With apt cache: **79% faster** (38 seconds saved per run)
-- With Docker: **90% faster** (43 seconds saved per run)
+**Savings:** 79% faster (apt cache) → 90% faster (Docker)
 
 ---
 
 ## 🧪 TEST REQUIREMENTS
-
-### Running Tests Locally
 
 ```bash
 # Set API key
@@ -291,88 +331,35 @@ python -m pytest tests/ --cov=core --cov-report=html
 
 # Skip slow tests
 python -m pytest tests/ -v -m "not slow"
-
-# Run specific test
-python -m pytest tests/test_tts_generator.py::TestSynthesizeModes::test_synthesize_shorts -v
 ```
 
-### Test Coverage
-
-- **Target:** 70% (MVP acceptable at 35%)
-- **Critical paths:** Script generation, TTS synthesis, error handling
-- **Optional:** Video rendering, upload (Part 2+)
+**Target Coverage:** 70% (MVP acceptable at 35%)
 
 ---
 
-## 📊 WORKFLOW FILES
+## 📄 WORKFLOW FILES
 
-### Main Workflow
-**File:** `.github/workflows/main.yml`
-- Runs on: Push to main, Manual trigger
-- Jobs: Test, Build Docker (optional)
-- Outputs: Test reports, Coverage, Docker image
-
-### Build Docker Workflow
-**File:** `.github/workflows/build-docker.yml` (to create)
-- Builds Docker image
-- Pushes to GitHub Container Registry
-- Uses buildx for caching
+- `.github/workflows/main.yml` - CI/CD tests & builds
+- `.github/workflows/auto-fix-agent.yml` - Auto-fix on failures (NEW!)
+- `.github/workflows/build-docker.yml` - Docker builds (to create)
+- `.github/auto-fix-config.yml` - Auto-fix configuration (NEW!)
 
 ---
 
 ## 🚀 NEXT MILESTONES
 
-### Part 2: Video Rendering
-- Use `moviepy` for video creation
-- Combine: Script + TTS audio + background video + subtitles
-- Estimated: 2 weeks
+### Part 2: Video Rendering (2 weeks)
+- Use moviepy for video creation
+- Combine script + TTS + background video + subtitles
 
-### Part 3: Audio Enhancement
-- Add background music (Pixabay API)
-- Sound effects
-- Audio mixing
-- Estimated: 1 week
+### Part 3: Audio Enhancement (1 week)
+- Background music (Pixabay API)
+- Sound effects & mixing
 
-### Part 4: Upload & Distribution
-- YouTube API integration
-- TikTok upload
-- Instagram Reels
-- Estimated: 2 weeks
-
----
-
-## 📄 CONFIGURATION FILES
-
-- `projects/youtube_horoscope/config.yaml` - Project config
-- `requirements.txt` - Python dependencies
-- `Dockerfile` - Docker image (to create)
-- `.github/workflows/main.yml` - CI/CD workflow
-- `.github/workflows/build-docker.yml` - Docker build (to create)
-- `.github/TECHNICAL_REQUIREMENTS.md` - This file
-
----
-
-## 📃 NOTES FOR AI AGENT
-
-1. **No Mocks!** Tests use real `GOOGLE_AI_API_KEY` from environment
-   - Tests skip gracefully if API key not available
-   - No fake/mock data
-
-2. **Gemini 2.5 TTS** is the correct choice
-   - Edge-TTS blocks GitHub Actions (403 Forbidden)
-   - Gemini works everywhere (API-based)
-
-3. **Docker is production-ready**
-   - 90% performance improvement
-   - Eliminates 30 seconds of apt installation
-   - Ensures consistency
-
-4. **All code must be async-compatible**
-   - TTS synthesis uses async/await
-   - Pipeline uses asyncio.run()
-   - Tests marked with @pytest.mark.asyncio
+### Part 4: Upload & Distribution (2 weeks)
+- YouTube, TikTok, Instagram integration
 
 ---
 
 **Last Updated:** 2025-12-12
-**Status:** Part 1 MVP Complete, Ready for Part 2
+**Status:** Part 1 MVP Complete + Auto-Fix Agent Deployed ✨
