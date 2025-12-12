@@ -3,13 +3,13 @@
 
 # ===== AI MODEL SELECTION =====
 ai_models:
-  # Прымая выбор какоь модель использовать
+  # Прямая выбор какою модель использовать
   # Опции: 'gemini' | 'qwen' | 'dual'
   # 
   # gemini - Только Gemini 2.5 Flash (быстро)
   # qwen   - Только Qwen 3 Max (глубоко, бесплатно)
   # dual   - Обе модели + сравнение (самое мощные)
-  primary: 'gemini'  # ← МЕНЯЙ ЭТО!
+  primary: 'gemini'  # ← МЕНЯЙ ЭТО! типы: gemini | qwen | dual
 
   # Конфиг для каждой модели
   gemini:
@@ -19,14 +19,18 @@ ai_models:
     max_tokens: 4096
     temperature: 0.3  # Пнижают хаотичность, больше спокойные решения
     description: 'Fast, real-time analysis'
+    secret_key: 'GOOGLE_AI_API_KEY'  # GitHub Secret name
 
   qwen:
-    enabled: false  # По умолчанию отключен до первых 2000 requests
+    enabled: true  # НТЕПЕРЬ ОН ВКЛЮЧЕН! Ключи уже в GitHub Secrets
     model: 'qwen-max'
+    base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1'  # OpenAI-совместимый
     timeout: 60
     max_tokens: 8192
     temperature: 0.2  # Еще ниже для осторожности
-    description: 'Deep analysis, free tier (2000 req/day)'
+    description: 'Deep analysis, free tier (2000 req/day from local CLI)'
+    secret_key: 'QWEN_ACCESS_TOKEN'  # GitHub Secret name
+    source: 'local-qwen-code'  # Вытащено из C:\Users\varsm\.qwen\oauth_creds.json
 
   dual:
     enabled: false  # Оключи обе модели?
@@ -65,7 +69,6 @@ safety:
     - 'config'           # Может вызвать побочные эффекты
 
   # Ограничения на рассчёты
-  # Агент не будет содин и делать дорогостоящие вещи
   dont_auto_fix_keywords:
     - 'large file upload'  # Могут быть проблемы с рассчётами
     - 'large data'         # Никогда не автоматизируйте данные
@@ -80,7 +83,7 @@ context:
     # Понимает project-спецификов
   
   include_recent_commits: true
-    # Поминает штам три последних коммита
+    # Поминает напоследние 3 коммита
     # Фиксирует опасные изменения
   
   include_test_history: true
@@ -91,9 +94,6 @@ context:
   include_readme: true
     # Очень осторожно! Понимает желаемое архитектура
 
-  # Промпт наложенные вздесь 
-  # определяют играяют границы
-  
   system_prompt_template: |
     You are an expert DevOps engineer and code reviewer.
     
@@ -140,3 +140,13 @@ logging:
   save_artifacts: true
   save_analysis: true
   include_tokens_used: true
+
+# ===== QWEN OAUTH CREDENTIALS =====
+# Цветовод для новых ключей:
+qwen_credentials:
+  source: 'C:\\Users\\varsm\\.qwen\\oauth_creds.json'  # Откуда вытащено
+  extracted_at: '2025-12-12T16:45:00Z'  # Когда
+  access_token_secret: 'QWEN_ACCESS_TOKEN'  # GitHub Secret name
+  refresh_token_secret: 'QWEN_REFRESH_TOKEN'  # На случай если истечёт
+  expiry_date: 1765543004617  # milliseconds, истекает в феврале 2025
+  note: 'Генерируются с Qwen Code CLI (github.com/QwenLM/qwen-code)'
