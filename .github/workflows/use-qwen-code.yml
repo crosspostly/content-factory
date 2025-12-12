@@ -1,0 +1,44 @@
+name: Use Qwen Code
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Task for Qwen Code'
+        required: true
+        default: 'Explain the project structure'
+
+jobs:
+  qwen-code:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Qwen Code
+        run: npm install -g @qwen-code/qwen-code@latest
+
+      - name: Configure Qwen OAuth
+        env:
+          QWEN_OAUTH_TOKEN: ${{ secrets.QWEN_REFRESH_TOKEN }}
+        run: |
+          # Create .qwen config directory
+          mkdir -p ~/.qwen
+          
+          # The token is stored as a Bearer token that Qwen Code can use
+          echo "Qwen Code installed. Ready to use with OAuth token."
+
+      - name: Run Qwen Code Task
+        env:
+          QWEN_OAUTH_TOKEN: ${{ secrets.QWEN_REFRESH_TOKEN }}
+        run: |
+          # Run Qwen Code with the task
+          # Note: This runs in non-interactive mode for CI/CD
+          qwen --yolo << 'EOF'
+          ${{ github.event.inputs.task }}
+          EOF
