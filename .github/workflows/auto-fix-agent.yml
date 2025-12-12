@@ -2,7 +2,7 @@ name: Auto-Fix Agent
 
 on:
   workflow_run:
-    workflows: ["Generate Content (Part 1 MVP)", "test"]
+    workflows: ["tests.yml", "part1-test.yml"]
     types: [completed]
 
 jobs:
@@ -35,9 +35,27 @@ jobs:
         with:
           python-version: '3.11'
       
+      - name: Setup Ollama for Qwen (cached)
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama
+          key: ollama-qwen-Linux
+          restore-keys: ollama-qwen-
+      
+      - name: Install Ollama & pull Qwen model
+        run: |
+          curl -fsSL https://ollama.ai/install.sh | sh
+          # Start Ollama in background
+          ollama serve &
+          sleep 3
+          # Pull smaller model for GitHub Actions (1.5B fits in 7GB limit)
+          ollama pull qwen2.5-coder:1.5b
+          echo "✅ Qwen model ready"
+      
       - name: Install dependencies
         run: |
-          pip install google-generativeai requests pyyaml pandas
+          pip install -r requirements.txt
+          pip install google-generativeai openai requests pyyaml pandas ollama
       
       - name: Fetch GitHub Actions logs
         id: logs
@@ -46,10 +64,8 @@ jobs:
           import subprocess
           import os
           
-          # Get workflow run logs
           workflow_id = "${{ steps.workflow.outputs.workflow_id }}"
           
-          # Use gh CLI to get logs
           result = subprocess.run(
               ["gh", "run", "view", workflow_id, "--log"],
               capture_output=True,
@@ -59,7 +75,6 @@ jobs:
           
           logs = result.stdout + result.stderr
           
-          # Save to file
           with open("/tmp/workflow_logs.txt", "w") as f:
               f.write(logs)
           
@@ -81,29 +96,35 @@ jobs:
           
           PYTHON_SCRIPT
       
-      - name: Analyze with Gemini 2.5
-        id: gemini
+      - name: Analyze with LLM (Qwen or Gemini)
+        id: analysis
+        env:
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           python3 << 'PYTHON_SCRIPT'
-          import google.generativeai as genai
-          import os
           import json
+          import os
+          import sys
+          sys.path.insert(0, os.getcwd())
           
-          api_key = "${{ secrets.GOOGLE_AI_API_KEY }}"
-          if not api_key:
-              print("ERROR: GOOGLE_AI_API_KEY not set")
-              exit(1)
+          from core.utils.model_router import generate_text
+          from core.utils.config_loader import ProjectConfig
           
-          genai.configure(api_key=api_key)
-          # Using Gemini 2.5 Flash - fastest model
-          model = genai.GenerativeModel('gemini-2.5-flash')
+          # Determine which model to use
+          use_qwen = True  # Try Qwen first (local, free)
+          model = "qwen2.5-coder:1.5b"
+          
+          if not use_qwen or not os.getenv("OLLAMA_HOST"):
+              # Fallback to Gemini
+              model = "gemini-2.0-flash"
+              use_qwen = False
+          
+          print(f"🤖 Using model: {model}")
           
           # Read logs
           with open("/tmp/workflow_logs.txt", "r") as f:
-              logs = f.read()
-          
-          # Limit to last 3000 chars to avoid token limits
-          logs = logs[-3000:]
+              logs = f.read()[-3000:]  # Last 3000 chars
           
           prompt = f"""You are an expert DevOps engineer and software developer.
           
@@ -124,8 +145,8 @@ jobs:
             "root_cause": "Why it happened",
             "severity": "critical|high|medium|low",
             "solution_steps": ["step 1", "step 2", ...],
-            "code_fix": "Python/YAML code to fix (if applicable) or empty string if no fix needed",
-            "file_to_modify": "path/to/file or null if no single file fix",
+            "code_fix": "Python/YAML code to fix (if applicable) or empty string",
+            "file_to_modify": "path/to/file or null",
             "suggested_commit_message": "git commit message",
             "technical_task": "Detailed technical task for fixing",
             "auto_fix_possible": true/false
@@ -133,41 +154,54 @@ jobs:
           
           Be precise and actionable."""
           
-          response = model.generate_content(prompt)
-          
           try:
-              analysis = json.loads(response.text)
-          except:
-              # Extract JSON from response
+              # Create minimal config for model_router
+              class GenConfig:
+                  primary_model = model
+                  fallback_models = ["gemini-2.0-flash"] if use_qwen else []
+                  temperature = 0.7
+                  max_retries = 1
+              
+              class Config:
+                  generation = GenConfig()
+              
+              response = generate_text(Config(), prompt)
+              
+              # Parse JSON from response
               import re
-              match = re.search(r'\{.*\}', response.text, re.DOTALL)
+              match = re.search(r'\{[\s\S]*\}', response)
               if match:
                   analysis = json.loads(match.group())
               else:
-                  analysis = {
-                      "problem": "Failed to parse error",
-                      "root_cause": response.text[:200],
-                      "severity": "high",
-                      "solution_steps": [],
-                      "auto_fix_possible": False,
-                      "code_fix": ""
-                  }
+                  raise ValueError("No JSON found in response")
+          
+          except Exception as e:
+              print(f"Error calling LLM: {e}")
+              analysis = {
+                  "problem": f"LLM analysis failed: {str(e)}",
+                  "root_cause": "Could not analyze logs",
+                  "severity": "high",
+                  "solution_steps": [],
+                  "auto_fix_possible": False,
+                  "code_fix": ""
+              }
           
           # Save analysis
           with open("/tmp/analysis.json", "w") as f:
               json.dump(analysis, f, indent=2)
           
-          # Output for next step
+          # Output for next steps
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"problem={analysis.get('problem', 'Unknown')[:100]}\n")
               f.write(f"severity={analysis.get('severity', 'medium')}\n")
               f.write(f"auto_fix_possible={str(analysis.get('auto_fix_possible', False)).lower()}\n")
+              f.write(f"model_used={'qwen' if use_qwen else 'gemini'}\n")
           
           print(json.dumps(analysis, indent=2))
           
           PYTHON_SCRIPT
       
-      - name: Create or Update GitHub Issue
+      - name: Create GitHub Issue
         if: always()
         id: issue
         run: |
@@ -188,6 +222,7 @@ jobs:
           **Run:** [${{ steps.workflow.outputs.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ steps.workflow.outputs.workflow_id }})
           **Branch:** `${{ steps.workflow.outputs.head_branch }}`
           **Commit:** `${{ steps.workflow.outputs.head_sha }}`
+          **AI Model Used:** `${{ steps.analysis.outputs.model_used }}`
           
           ### Problem
           {analysis.get('problem', 'N/A')}
@@ -211,19 +246,18 @@ jobs:
           
           ### Auto-Fix Status
           - Auto-fix possible: `{analysis.get('auto_fix_possible', False)}`
-          - Status: Creating PR with suggested changes
+          - Analyzed with: `{os.getenv("MODEL_USED", "unknown")}`
           
           ---
           *Generated by Auto-Fix Agent 🤖 at {datetime.now().isoformat()}*
           """
           
-          # Create issue with gh CLI
           result = subprocess.run(
               [
                   "gh", "issue", "create",
                   "--title", issue_title,
                   "--body", issue_body,
-                  "--label", "bug,auto-generated"
+                  "--label", "bug,auto-generated,ai-analyzed"
               ],
               capture_output=True,
               text=True,
@@ -241,7 +275,7 @@ jobs:
           PYTHON_SCRIPT
       
       - name: Create PR with Auto-Fix
-        if: ${{ steps.gemini.outputs.auto_fix_possible == 'true' }}
+        if: ${{ steps.analysis.outputs.auto_fix_possible == 'true' }}
         id: pr
         run: |
           python3 << 'PYTHON_SCRIPT'
@@ -250,7 +284,6 @@ jobs:
           import subprocess
           import datetime
           
-          # Load analysis
           with open("/tmp/analysis.json", "r") as f:
               analysis = json.load(f)
           
@@ -264,24 +297,18 @@ jobs:
           
           print(f"🔧 Creating PR with auto-fix...")
           print(f"📄 File: {file_to_modify}")
-          print(f"💾 Applying code fix...")
           
-          # Create new branch
           timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
           branch_name = f"auto-fix/run-${{ steps.workflow.outputs.run_number }}-{timestamp}"
           
           subprocess.run(["git", "config", "user.email", "auto-fix-agent@github.com"])
           subprocess.run(["git", "config", "user.name", "Auto-Fix Agent"])
-          
-          # Create and checkout new branch from main
           subprocess.run(["git", "checkout", "-b", branch_name, "origin/main"])
           
-          # Apply fix
           if os.path.exists(file_to_modify):
               with open(file_to_modify, "w") as f:
                   f.write(code_fix)
               
-              # Commit
               subprocess.run(["git", "add", file_to_modify])
               result = subprocess.run(
                   ["git", "commit", "-m", f"{commit_msg}\n\n[auto-fix-agent run #${{ steps.workflow.outputs.run_number }}]\nWorkflow: ${{ steps.workflow.outputs.workflow_name }}"],
@@ -290,19 +317,18 @@ jobs:
               )
               
               if result.returncode == 0:
-                  # Push branch
                   result = subprocess.run(["git", "push", "-u", "origin", branch_name], capture_output=True, text=True)
                   
                   if result.returncode == 0:
                       print(f"✅ Pushed branch: {branch_name}")
                       
-                      # Create PR
                       pr_title = f"🔧 Auto-Fix: {analysis.get('problem', 'Unknown')[:60]}"
                       pr_body = f"""## Auto-Fix PR
                       
                       **Issue:** {analysis.get('problem', 'N/A')}
                       **Root Cause:** {analysis.get('root_cause', 'N/A')}
                       **Severity:** {analysis.get('severity', 'medium')}
+                      **AI Model:** `${{ steps.analysis.outputs.model_used }}`
                       
                       ### Solution
                       {chr(10).join(f'- {step}' for step in analysis.get('solution_steps', []))}
@@ -314,7 +340,7 @@ jobs:
                       [${{ steps.workflow.outputs.workflow_name }} #${{ steps.workflow.outputs.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ steps.workflow.outputs.workflow_id }})
                       
                       ---
-                      *Created by Auto-Fix Agent 🤖*
+                      *Created by Auto-Fix Agent 🤖 with ${{ steps.analysis.outputs.model_used }} AI*
                       *Please review and merge manually*
                       """
                       
@@ -325,7 +351,7 @@ jobs:
                               "--head", branch_name,
                               "--title", pr_title,
                               "--body", pr_body,
-                              "--label", "auto-generated,auto-fix"
+                              "--label", "auto-generated,auto-fix,ai-generated"
                           ],
                           capture_output=True,
                           text=True,
@@ -337,14 +363,6 @@ jobs:
                           print(f"✅ Created PR: {pr_url}")
                           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                               f.write(f"pr_url={pr_url}\n")
-                      else:
-                          print(f"❌ PR creation failed: {result.stderr}")
-                  else:
-                      print(f"❌ Push failed: {result.stderr}")
-              else:
-                  print(f"⚠️ Commit failed: {result.stderr}")
-          else:
-              print(f"❌ File not found: {file_to_modify}")
           
           PYTHON_SCRIPT
       
@@ -355,8 +373,9 @@ jobs:
           echo ""
           echo "**Status:** ${{ job.status }}"
           echo "**Workflow:** ${{ steps.workflow.outputs.workflow_name }}"
-          echo "**Severity:** ${{ steps.gemini.outputs.severity }}"
-          echo "**Auto-fix possible:** ${{ steps.gemini.outputs.auto_fix_possible }}"
+          echo "**AI Model:** ${{ steps.analysis.outputs.model_used }}"
+          echo "**Severity:** ${{ steps.analysis.outputs.severity }}"
+          echo "**Auto-fix possible:** ${{ steps.analysis.outputs.auto_fix_possible }}"
           echo ""
           if [ "${{ steps.issue.outputs.issue_url }}" != "" ]; then
             echo "**Issue:** ${{ steps.issue.outputs.issue_url }}"
@@ -365,4 +384,4 @@ jobs:
             echo "**PR:** ${{ steps.pr.outputs.pr_url }}"
           fi
           echo ""
-          echo "**Mode:** Always enabled (creates PR, manual merge required)"
+          echo "✅ Auto-Fix Agent ready with Gemini/Qwen dual support"
