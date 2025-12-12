@@ -1,0 +1,8 @@
+2025-12-12T15:45:00.000Z ERROR:
+Traceback (most recent call last):
+  File "core/utils/model_router.py", line 150, in _call_gemini
+    resp = m.generate_content(prompt, **kwargs)
+google.generativeai.types.generation_types.APIError: 429 Resource Exhausted: 
+API request limit exceeded. Please retry with exponential backoff.
+
+The command exited with code 1

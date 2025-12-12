@@ -1,0 +1,7 @@
+2025-12-12T15:50:00.000Z ERROR:
+Traceback (most recent call last):
+  File "tests/test_auto_fix_agent.py", line 5, in <module>
+    import undefined_module
+ImportError: No module named 'undefined_module'
+
+The command exited with code 1
