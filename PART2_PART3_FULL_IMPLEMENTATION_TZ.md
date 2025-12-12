@@ -1,7 +1,7 @@
 # 🎯 ПОЛНОЕ ТЕХНИЧЕСКОЕ ЗАДАНИЕ: Part 2 (TTS) + Part 3 (Video Rendering) + Tests
 
 **Дата:** 12 декабря 2025  
-**Версия:** 2.0 (COMPLETE)  
+**Версия:** 2.1 (UPDATED with ALL free stock video APIs)  
 **Статус:** ✅ READY FOR IMPLEMENTATION
 
 ---
@@ -27,7 +27,7 @@
 
 Реализовать **законченные, рабочие** модули для:
 - **Part 2:** Синтез речи (TTS) с использованием Edge-TTS
-- **Part 3:** Рендеринг видео с использованием MoviePy + FFmpeg
+- **Part 3:** Рендеринг видео с использованием MoviePy + FFmpeg + **МНОЖЕСТВЕННЫЕ бесплатные видео API**
 - **Tests:** Полное покрытие тестами всех функций
 - **Logging:** Детальное логирование каждого шага
 
@@ -83,10 +83,13 @@ pytest-asyncio==0.21.1
 # Обязательные для Part 1
 GOOGLE_AI_API_KEY=<gemini-api-key>
 
-# Обязательные для Part 3
-PIXABAY_API_KEY=<pixabay-api-key>
+# Обязательные для Part 3 (хотя бы ОДИН из этих ключей)
+PIXABAY_API_KEY=<pixabay-api-key>          # Рекомендуется
+PEXELS_API_KEY=<pexels-api-key>            # Альтернатива/дополнение
 
-# Опциональные
+# Опциональные (расширенный функционал)
+COVERR_API_KEY=<coverr-api-key>            # Опционально (пока нет API, только scraping)
+MIXKIT_API_KEY=<mixkit-api-key>            # Опционально (пока нет официального API)
 OPENROUTER_API_KEY=<openrouter-fallback>
 TELEGRAM_BOT_TOKEN=<telegram-notifications>
 TELEGRAM_CHAT_ID=<telegram-chat>
@@ -422,10 +425,27 @@ def test_validate_config_missing_keys(tts_generator):
 1. **Класс `VideoRenderer`**
    - Инициализация с конфигом проекта
    - Поддержка MoviePy для монтажа
-   - Поддержка Pixabay API для фоновых видео
+   - **Поддержка МНОЖЕСТВЕННЫХ бесплатных видео API (с приоритетами и fallback)**
    - Генерация Shorts (1080x1920), Long Form (1920x1080), Ads (1080x1920)
 
-2. **Методы**
+2. **Поддерживаемые бесплатные видео API** (в порядке приоритета):
+
+| API | Лицензия | Атрибуция | API Ключ | Rate Limit | Качество |
+|-----|----------|-----------|----------|------------|----------|
+| **Pexels** | Custom Free | ❌ Не требуется | ✅ Бесплатный | 200 req/hour | ⭐⭐⭐⭐⭐ Отличное |
+| **Pixabay** | Custom Free | ❌ Не требуется | ✅ Бесплатный | ~100 req/min | ⭐⭐⭐⭐ Хорошее |
+| **Coverr** | CC0 Public | ❌ Не требуется | ❌ Нет API (scraping) | Unlimited | ⭐⭐⭐ Среднее |
+| **Mixkit** | Custom Free | ❌ Не требуется | ❌ Нет API (scraping) | Unlimited | ⭐⭐⭐⭐ Хорошее |
+| **Fallback** | - | - | - | - | 🎨 ColorClip (черный фон) |
+
+**СТРАТЕГИЯ FALLBACK:**
+1. Попытка Pexels API (если `PEXELS_API_KEY` установлен)
+2. Попытка Pixabay API (если `PIXABAY_API_KEY` установлен)
+3. Fallback на Coverr scraping (если доступен)
+4. Fallback на Mixkit scraping (если доступен)
+5. Финальный fallback: черный фон через `ColorClip`
+
+3. **Методы**
 
 ```python
 class VideoRenderer:
@@ -464,7 +484,8 @@ class VideoRenderer:
                 "file_size_mb": float,
                 "fps": int,             # 30
                 "codec": str,           # "libx264"
-                "audio_codec": str      # "aac"
+                "audio_codec": str,     # "aac"
+                "background_source": str  # "pexels", "pixabay", "coverr", "mixkit", "fallback"
             }
         
         Raises:
@@ -523,18 +544,91 @@ class VideoRenderer:
         query: str = "abstract background"
     ) -> VideoFileClip:
         """
-        Получить фоновое видео из Pixabay или создать чёрный фон
+        Получить фоновое видео из бесплатных API (с fallback каскадом)
+        
+        СТРАТЕГИЯ:
+        1. Pexels API (если ключ установлен)
+        2. Pixabay API (если ключ установлен)
+        3. Coverr scraping (если доступен)
+        4. Mixkit scraping (если доступен)
+        5. Fallback: черный фон ColorClip
         
         Args:
             duration: Требуемая длительность в секундах
             resolution: "1080x1920" или "1920x1080"
-            query: Поисковый запрос для Pixabay
+            query: Поисковый запрос для API
         
         Returns:
             VideoFileClip: MoviePy clip с фоном
         
         Raises:
-            APIError: если Pixabay API недоступен (fallback на ColorClip)
+            APIError: если ВСЕ источники недоступны (маловероятно из-за fallback)
+        """
+        pass
+    
+    def _fetch_pexels_video(self, query: str, duration: float, resolution: str) -> Optional[str]:
+        """
+        Получить видео из Pexels API
+        
+        API Endpoint: https://api.pexels.com/videos/search
+        Rate Limit: 200 requests/hour
+        
+        Args:
+            query: Поисковый запрос
+            duration: Минимальная длительность
+            resolution: "1080x1920" или "1920x1080"
+        
+        Returns:
+            Optional[str]: URL видеофайла или None если не найдено
+        """
+        pass
+    
+    def _fetch_pixabay_video(self, query: str, duration: float, resolution: str) -> Optional[str]:
+        """
+        Получить видео из Pixabay API
+        
+        API Endpoint: https://pixabay.com/api/videos/
+        Rate Limit: ~100 requests/minute
+        
+        Args:
+            query: Поисковый запрос
+            duration: Минимальная длительность
+            resolution: "1080x1920" или "1920x1080"
+        
+        Returns:
+            Optional[str]: URL видеофайла или None если не найдено
+        """
+        pass
+    
+    def _fetch_coverr_video(self, query: str, duration: float) -> Optional[str]:
+        """
+        Получить видео из Coverr через scraping (нет официального API)
+        
+        Website: https://coverr.co/
+        Note: Использовать с осторожностью, может сломаться при изменении сайта
+        
+        Args:
+            query: Поисковый запрос (категория)
+            duration: Минимальная длительность
+        
+        Returns:
+            Optional[str]: URL видеофайла или None если не найдено
+        """
+        pass
+    
+    def _fetch_mixkit_video(self, query: str, duration: float) -> Optional[str]:
+        """
+        Получить видео из Mixkit через scraping (нет официального API)
+        
+        Website: https://mixkit.co/free-stock-video/
+        Note: Использовать с осторожностью, может сломаться при изменении сайта
+        
+        Args:
+            query: Поисковый запрос (категория)
+            duration: Минимальная длительность
+        
+        Returns:
+            Optional[str]: URL видеофайла или None если не найдено
         """
         pass
     
@@ -596,6 +690,7 @@ logger = logging.getLogger(__name__)
 
 # При инициализации
 logger.info(f"✅ VideoRenderer initialized (ffmpeg: {self.ffmpeg_path})")
+logger.info(f"  API Keys: Pexels={bool(self.pexels_key)}, Pixabay={bool(self.pixabay_key)}")
 
 # При рендере
 logger.info(f"🎬 Rendering {mode} video: {output_path}")
@@ -604,14 +699,16 @@ logger.info(f"  Resolution: {resolution}")
 logger.info(f"  Duration: {duration:.2f}s")
 
 # Прогресс
-logger.info(f"  [1/5] Loading audio...")
-logger.info(f"  [2/5] Getting background video...")
-logger.info(f"  [3/5] Creating text overlays...")
-logger.info(f"  [4/5] Compositing clips...")
-logger.info(f"  [5/5] Encoding to MP4...")
+logger.info(f"  [1/6] Loading audio...")
+logger.info(f"  [2/6] Fetching background video (trying Pexels)...")
+logger.info(f"  [3/6] Creating text overlays...")
+logger.info(f"  [4/6] Compositing clips...")
+logger.info(f"  [5/6] Adding audio track...")
+logger.info(f"  [6/6] Encoding to MP4...")
 
 # При успехе
 logger.info(f"✅ Video rendered: {output_path} ({file_size_mb:.1f} MB)")
+logger.info(f"  Background source: {background_source}")
 
 # При ошибке
 logger.error(f"❌ Video rendering failed: {str(e)}")
@@ -647,7 +744,8 @@ print(result)
 #     "file_size_mb": 45.3,
 #     "fps": 30,
 #     "codec": "libx264",
-#     "audio_codec": "aac"
+#     "audio_codec": "aac",
+#     "background_source": "pexels"  # или "pixabay", "fallback" и т.д.
 # }
 ```
 
@@ -672,7 +770,7 @@ def test_check_ffmpeg(video_renderer):
     assert video_renderer._check_ffmpeg() is True
 
 def test_render_shorts_black_background(video_renderer, tmp_path):
-    """Тест: рендер Shorts с чёрным фоном (без Pixabay)"""
+    """Тест: рендер Shorts с чёрным фоном (без API)"""
     # Создать тестовый аудио файл
     audio_file = tmp_path / "test_audio.wav"
     # ... генерация тестового аудио через TTS или mock
@@ -688,18 +786,66 @@ def test_render_shorts_black_background(video_renderer, tmp_path):
     assert result["resolution"] == "1080x1920"
     assert result["fps"] == 30
     assert result["codec"] == "libx264"
+    assert result["background_source"] in ["pexels", "pixabay", "coverr", "mixkit", "fallback"]
     assert output_file.exists()
     assert output_file.stat().st_size > 0
 
-def test_render_shorts_with_pixabay(video_renderer, tmp_path, monkeypatch):
-    """Тест: рендер Shorts с Pixabay видео"""
+def test_fetch_pexels_video(video_renderer, monkeypatch):
+    """Тест: получение видео из Pexels API"""
+    # Mock Pexels API response
+    def mock_pexels_request(*args, **kwargs):
+        return {
+            "videos": [{
+                "video_files": [{
+                    "link": "https://example.com/video.mp4",
+                    "quality": "hd",
+                    "width": 1080,
+                    "height": 1920
+                }]
+            }]
+        }
+    
+    monkeypatch.setattr("requests.get", lambda *a, **k: type('obj', (object,), {
+        'json': lambda: mock_pexels_request()
+    })())
+    
+    url = video_renderer._fetch_pexels_video(
+        query="abstract",
+        duration=10.0,
+        resolution="1080x1920"
+    )
+    
+    assert url is not None
+    assert "video.mp4" in url
+
+def test_fetch_pixabay_video(video_renderer, monkeypatch):
+    """Тест: получение видео из Pixabay API"""
     # Mock Pixabay API response
     def mock_pixabay_request(*args, **kwargs):
-        return {"hits": [{"videos": {"large": {"url": "https://example.com/video.mp4"}}}]}
+        return {
+            "hits": [{
+                "videos": {
+                    "large": {
+                        "url": "https://example.com/pixabay_video.mp4",
+                        "width": 1920,
+                        "height": 1080
+                    }
+                }
+            }]
+        }
     
-    monkeypatch.setattr("requests.get", lambda *a, **k: type('obj', (object,), {'json': mock_pixabay_request})())
+    monkeypatch.setattr("requests.get", lambda *a, **k: type('obj', (object,), {
+        'json': lambda: mock_pixabay_request()
+    })())
     
-    # ... аналогично test_render_shorts_black_background
+    url = video_renderer._fetch_pixabay_video(
+        query="nature",
+        duration=10.0,
+        resolution="1920x1080"
+    )
+    
+    assert url is not None
+    assert "pixabay_video.mp4" in url
 
 def test_render_shorts_missing_audio(video_renderer, tmp_path):
     """Тест: рендер без аудиофайла должен выдать ошибку"""
@@ -730,6 +876,24 @@ def test_validate_config_missing_video_section(video_renderer):
     
     with pytest.raises(ValueError, match="Missing video config"):
         video_renderer._validate_config()
+
+def test_fallback_cascade(video_renderer, monkeypatch):
+    """Тест: каскад fallback при недоступности всех API"""
+    # Mock все API как недоступные
+    monkeypatch.setattr(video_renderer, "_fetch_pexels_video", lambda *a, **k: None)
+    monkeypatch.setattr(video_renderer, "_fetch_pixabay_video", lambda *a, **k: None)
+    monkeypatch.setattr(video_renderer, "_fetch_coverr_video", lambda *a, **k: None)
+    monkeypatch.setattr(video_renderer, "_fetch_mixkit_video", lambda *a, **k: None)
+    
+    # Должен вернуть ColorClip (черный фон)
+    clip = video_renderer._get_background_video(
+        duration=10.0,
+        resolution="1080x1920",
+        query="test"
+    )
+    
+    assert clip is not None
+    assert clip.duration == 10.0
 ```
 
 ---
@@ -818,6 +982,7 @@ def run_full_pipeline(project: str, mode: str, dry_run: bool = False):
             )
         
         logger.info(f"✅ Video rendered: {video_result['video_path']}")
+        logger.info(f"  Background source: {video_result['background_source']}")
     
     # ===== SUMMARY =====
     logger.info("\n✅ PIPELINE COMPLETE")
@@ -866,6 +1031,7 @@ def test_full_pipeline_shorts_real(tmp_path, monkeypatch):
     assert result["script"]["id"] is not None
     assert result["audio"]["total_duration_sec"] > 0
     assert Path(result["video"]["video_path"]).exists()
+    assert result["video"]["background_source"] in ["pexels", "pixabay", "coverr", "mixkit", "fallback"]
 ```
 
 ---
@@ -902,10 +1068,12 @@ def test_output_dir():
 def mock_env_vars():
     """Mock переменных окружения для тестов"""
     os.environ["GOOGLE_AI_API_KEY"] = "test-key"
-    os.environ["PIXABAY_API_KEY"] = "test-key"
+    os.environ["PEXELS_API_KEY"] = "test-pexels-key"
+    os.environ["PIXABAY_API_KEY"] = "test-pixabay-key"
     yield
     # Cleanup
     del os.environ["GOOGLE_AI_API_KEY"]
+    del os.environ["PEXELS_API_KEY"]
     del os.environ["PIXABAY_API_KEY"]
 
 @pytest.fixture
@@ -1043,6 +1211,7 @@ def check_environment() -> dict:
             "imagemagick": bool,
             "env_vars": {
                 "GOOGLE_AI_API_KEY": bool,
+                "PEXELS_API_KEY": bool,
                 "PIXABAY_API_KEY": bool,
                 ...
             },
@@ -1079,6 +1248,7 @@ def check_environment() -> dict:
     # 4. Environment variables
     env_vars = {
         "GOOGLE_AI_API_KEY": os.getenv("GOOGLE_AI_API_KEY"),
+        "PEXELS_API_KEY": os.getenv("PEXELS_API_KEY"),
         "PIXABAY_API_KEY": os.getenv("PIXABAY_API_KEY"),
         "OPENROUTER_API_KEY": os.getenv("OPENROUTER_API_KEY"),
         "TELEGRAM_BOT_TOKEN": os.getenv("TELEGRAM_BOT_TOKEN"),
@@ -1093,10 +1263,21 @@ def check_environment() -> dict:
         if is_set:
             logger.info(f"✅ {key}: set ({value[:10]}...)")
         else:
-            if key in ["GOOGLE_AI_API_KEY", "PIXABAY_API_KEY"]:
+            if key == "GOOGLE_AI_API_KEY":
                 logger.error(f"❌ {key}: NOT SET (required!)")
+            elif key in ["PEXELS_API_KEY", "PIXABAY_API_KEY"]:
+                logger.warning(f"⚠️  {key}: not set (at least ONE video API key required)")
             else:
                 logger.warning(f"⚠️  {key}: not set (optional)")
+    
+    # Проверка что хотя бы один видео API ключ установлен
+    video_api_keys_set = any([
+        results["env_vars"].get("PEXELS_API_KEY"),
+        results["env_vars"].get("PIXABAY_API_KEY")
+    ])
+    
+    if not video_api_keys_set:
+        logger.warning("⚠️  No video API keys set! Will use fallback (black background)")
     
     # 5. Output directories
     output_dirs = ["output/scripts", "output/audio", "output/videos", "output/logs"]
@@ -1109,13 +1290,15 @@ def check_environment() -> dict:
     required_checks = [
         results["ffmpeg"],
         results["imagemagick"],
-        results["env_vars"]["GOOGLE_AI_API_KEY"],
-        results["env_vars"]["PIXABAY_API_KEY"]
+        results["env_vars"]["GOOGLE_AI_API_KEY"]
+        # Видео API ключи не обязательны благодаря fallback
     ]
     results["all_checks_passed"] = all(required_checks)
     
     if results["all_checks_passed"]:
         logger.info("\n✅ ALL ENVIRONMENT CHECKS PASSED")
+        if not video_api_keys_set:
+            logger.info("  ℹ️  Video API keys not set, will use fallback backgrounds")
     else:
         logger.error("\n❌ SOME ENVIRONMENT CHECKS FAILED")
         logger.error("Fix the issues above before running the pipeline")
@@ -1160,10 +1343,14 @@ python -m core.utils.environment_checker
 - ✅ Метод `render_shorts()` работает
 - ✅ Метод `render_long_form()` работает
 - ✅ Метод `render_ad()` работает
-- ✅ Поддержка Pixabay API (с fallback на чёрный фон)
+- ✅ Поддержка Pexels API
+- ✅ Поддержка Pixabay API
+- ✅ Поддержка Coverr scraping (опционально)
+- ✅ Поддержка Mixkit scraping (опционально)
+- ✅ Fallback каскад (Pexels → Pixabay → Coverr → Mixkit → ColorClip)
 - ✅ Текстовые оверлеи с тенью
 - ✅ Экспорт в H.264 (MP4, 30fps)
-- ✅ Логирование каждого шага
+- ✅ Логирование каждого шага + источника фона
 - ✅ Тесты покрывают 90%+ кода
 - ✅ Генерируются MP4 файлы правильного разрешения
 
@@ -1173,6 +1360,7 @@ python -m core.utils.environment_checker
 - ✅ Dry-run режим работает
 - ✅ Все режимы (shorts, long_form, ad) работают
 - ✅ Логи показывают прогресс каждого этапа
+- ✅ Логи показывают источник фона для видео
 
 ### Part 5: Testing
 
@@ -1184,6 +1372,7 @@ python -m core.utils.environment_checker
 ### Part 6: Environment
 
 - ✅ `environment_checker.py` проверяет все зависимости
+- ✅ Проверка наличия хотя бы одного видео API ключа (с предупреждением)
 - ✅ GitHub Actions workflow запускает проверку
 - ✅ Понятные сообщения об ошибках
 
@@ -1260,12 +1449,14 @@ jobs:
       - name: 🔍 Check Environment
         env:
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
         run: python -m core.utils.environment_checker
       
       - name: 🎬 Generate Content
         env:
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
@@ -1318,9 +1509,13 @@ jobs:
 - [ ] Реализовать `render_shorts()`
 - [ ] Реализовать `render_long_form()`
 - [ ] Реализовать `render_ad()`
-- [ ] Реализовать `_get_background_video()`
+- [ ] Реализовать `_get_background_video()` с каскадом fallback
+- [ ] Реализовать `_fetch_pexels_video()`
+- [ ] Реализовать `_fetch_pixabay_video()`
+- [ ] Реализовать `_fetch_coverr_video()` (опционально)
+- [ ] Реализовать `_fetch_mixkit_video()` (опционально)
 - [ ] Реализовать `_create_text_overlay()`
-- [ ] Добавить логирование
+- [ ] Добавить логирование (с источником фона)
 - [ ] Написать тесты
 - [ ] Проверить что тесты проходят
 
@@ -1350,6 +1545,31 @@ jobs:
 
 ---
 
+## 🆕 ЧТО ИЗМЕНИЛОСЬ В ВЕРСИИ 2.1
+
+### Добавлено:
+
+1. **Поддержка Pexels API** (основной источник, 200 req/hour)
+2. **Поддержка Pixabay API** (альтернатива/дополнение, ~100 req/min)
+3. **Поддержка Coverr scraping** (опционально, нет API)
+4. **Поддержка Mixkit scraping** (опционально, нет API)
+5. **Каскад fallback**: Pexels → Pixabay → Coverr → Mixkit → ColorClip
+6. **Переменные окружения**: `PEXELS_API_KEY`, `PIXABAY_API_KEY`
+7. **Логирование источника фона** в результатах рендера
+8. **Таблица сравнения API** с лицензиями, rate limits и качеством
+9. **Тесты для всех источников видео**
+10. **Обновлённый environment checker** с проверкой видео API ключей
+
+### Обновлено:
+
+- `VideoRenderer` теперь поддерживает множественные источники видео
+- `_get_background_video()` реализует умный fallback каскад
+- Тесты покрывают все сценарии (включая fallback)
+- Логирование показывает какой источник использовался
+- GitHub Actions workflow включает оба API ключа
+
+---
+
 **🎉 ГОТОВО К РЕАЛИЗАЦИИ!**
 
 **Ожидаемый результат:**
@@ -1357,8 +1577,12 @@ jobs:
 output/
 ├── scripts/youtube_horoscope/20251212/short_a1b2c3.json
 ├── audio/youtube_horoscope/shorts_main.wav              # ✅ РЕАЛЬНЫЙ АУДИО
-├── videos/youtube_horoscope/shorts.mp4                  # ✅ РЕАЛЬНОЕ ВИДЕО
+├── videos/youtube_horoscope/shorts.mp4                  # ✅ РЕАЛЬНОЕ ВИДЕО (с Pexels/Pixabay фоном)
 └── logs/youtube_horoscope/20251212.log                  # ✅ ДЕТАЛЬНЫЕ ЛОГИ
+
+# В логах будет:
+# ✅ Video rendered: output/videos/youtube_horoscope/shorts.mp4 (45.3 MB)
+#   Background source: pexels
 ```
 
 **Контакт для вопросов:** GitHub Issues или PR comments  
