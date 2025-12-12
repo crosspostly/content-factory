@@ -1,0 +1,122 @@
+# 📾 LONG-FORM HOROSCOPE VIDEO SCRIPT GENERATOR
+# 🌟 генератор сценариев для долгих видео YouTube (8-15 мин)
+
+## STRUCTURE (8-15 min)
+
+**PART 1: INTRO** (0:00-1:00) [1 min]
+- Hook: "Today's most important astrological event"
+- Personal greeting
+- Today's theme
+- Why to watch
+
+**PART 2: ASTROLOGICAL CONTEXT** (1:00-2:30) [1.5 min]
+- Today's planetary positions
+- Moon phase significance
+- Energy of the day
+
+**PART 3: BY-SIGN HOROSCOPES** (2:30-12:00) [9.5 min]
+For EACH zodiac sign (~45 sec each, use template below):
+1. Sign name (2 sec) + daily rating (1 sec)
+2. Love forecast (10 sec)
+3. Career/Money (10 sec)
+4. Health/Wellness (5 sec)
+5. Lucky element: color, number (3 sec)
+6. Specific tip/action (5 sec)
+7. Empowerment statement (3 sec)
+
+**TEMPLATE FOR EACH SIGN:**
+```
+[SIGN NAME]: [daily rating]/10 day
+
+Любовь: [love forecast]
+Карьера: [career/money]
+Здоровье: [health tip]
+Число [X], Цвет [color]
+Совет: [DO/DON'T action]
+Помните: [empowerment]
+```
+
+**PART 4: WEEKLY HIGHLIGHT** (12:00-13:30) [1.5 min]
+Choose ONE per video:
+- Compatible Pairs: Love fortunes this week
+- Money Forecast: Financial opportunities
+- Health Alert: Self-care advice
+- Lucky Events: When breakthroughs happen
+- Love Advice: Relationship tips by sign
+
+**PART 5: WRAP-UP & CTAs** (13:30-15:00) [1.5 min]
+- Thank you + key takeaway (40 sec)
+- Tomorrow's teaser (20 sec)
+- Subscribe CTA (15 sec)
+- Comment CTA (15 sec)
+- Personal sign-off (10 sec)
+
+## OUTPUT FORMAT
+
+```json
+{
+  "video_title": "[Hook-driven title]",
+  "video_description": "[SEO-optimized with timestamps]",
+  
+  "intro": "[0:00-1:00]",
+  "astrological_context": "[1:00-2:30]",
+  
+  "zodiac_forecasts": [
+    {
+      "sign": "Aries",
+      "daily_rating": 8,
+      "love": "[forecast]",
+      "career": "[forecast]",
+      "health": "[tip]",
+      "lucky": {"color": "red", "number": 7},
+      "tip": "[action]",
+      "empowerment": "[statement]"
+    }
+    // ...11 more signs...
+  ],
+  
+  "special_section": {
+    "title": "[name]",
+    "type": "compatible_pairs | money_forecast | health_alert | lucky_events | love_advice",
+    "content": "[1.5 min script]"
+  },
+  
+  "closing_cta": "[1.5 min script]",
+  
+  "chapters": [
+    "0:00 Today's Cosmic News",
+    "1:00 Astrological Context",
+    "2:30 Aries",
+    // ...all 12 signs...,
+    "[time] Weekly Highlight",
+    "[time] Subscribe & Wrap Up"
+  ],
+  
+  "seo_keywords": ["list of keywords"],
+  "watch_time_estimate": "10-12 min",
+  "engagement_triggers": ["list of psychological triggers used"]
+}
+```
+
+## KEY RULES
+
+1. **Per-sign time**: 45-50 sec max (12 signs = 9-10 min total)
+2. **Authenticity**: Use REAL astrology principles
+3. **Positivity**: All signs get positive affirmation
+4. **CTAs**: Minimum 4 throughout video
+5. **Chapters**: Add YouTube chapters for better engagement
+6. **Value**: Viewers learn something concrete
+7. **Tone**: Warm, professional, mystical, empowering
+
+## GENERATION PARAMETERS
+
+Input:
+- `date` (optional): Today's date
+- `primary_theme`: love | career | health | general | abundance
+- `special_section_type`: compatible_pairs | money_forecast | health_alert | lucky_events | love_advice
+- `tone`: professional | playful | mystical | empowering
+- `moon_phase` (optional): new | waxing | full | waning
+
+---
+
+Now generate a COMPREHENSIVE long-form script!
