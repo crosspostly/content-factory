@@ -3,34 +3,32 @@
 > **Фабрика контента, работающая на GitHub Actions. Генерирует видео и контент для YouTube, TikTok, Instagram, VK с поддержкой Gemini, Edge-TTS, стоками и масштабируемыми проектами.**
 
 ![Version](https://img.shields.io/badge/version-2.2-blue)
-![Status](https://img.shields.io/badge/status-Part%202%20TTS%20Implementation-yellowgreen)
+![Status](https://img.shields.io/badge/status-Part%202%20TTS%20%2B%20Video-yellowgreen)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 
 ---
 
-## 🚀 STATUS: Part 2 + 3 Implementation (Edge-TTS + Video)
+## 📖 Documentation (START HERE)
+
+1. **[QUICK-START.md](./QUICK-START.md)** - 5-minute setup guide
+2. **[PART2_PART3_CRITICAL_TZ.md](./PART2_PART3_CRITICAL_TZ.md)** - Technical spec for Part 2 + 3 (AI agent)
+
+---
+
+## 🚀 Status
 
 ✅ **COMPLETED (Part 1):**
-- [x] Config loader (stdlib YAML parser)
-- [x] LLM routing (Gemini + fallbacks)
-- [x] Pipeline orchestrator (CLI)
-- [x] Script generator + file saving
-- [x] GitHub Actions workflow
+- Config loader (stdlib YAML)
+- LLM routing (Gemini + fallbacks)
+- Pipeline orchestrator (CLI)
+- Script generator + file saving
+- GitHub Actions workflow
 
 🔜 **IN PROGRESS (Part 2 + 3):**
 - Edge-TTS integration (ru-RU-DariyaNeural)
 - moviepy video rendering
 - Pixabay API for background videos
-
----
-
-## 📖 DOCUMENTATION
-
-**START HERE:**
-
-1. **[QUICK-START.md](./QUICK-START.md)** - 5-min setup guide
-2. **[PART2_PART3_CRITICAL_TZ.md](./PART2_PART3_CRITICAL_TZ.md)** - Technical spec for AI agent
 
 ---
 
@@ -70,9 +68,7 @@
 
 ---
 
-## 🔐 GitHub Secrets (Required)
-
-**For Part 2 + 3:**
+## 🔐 GitHub Secrets (Required for Part 2 + 3)
 
 | Secret | Value | Source |
 |--------|-------|--------|
@@ -82,14 +78,13 @@
 | `TELEGRAM_BOT_TOKEN` | Token | [@BotFather](https://t.me/BotFather) |
 | `TELEGRAM_CHAT_ID` | Chat ID | [@userinfobot](https://t.me/userinfobot) |
 
-**Setup:**
-Settings → Secrets and variables → Actions → New repository secret
+**Setup:** Settings → Secrets and variables → Actions → New repository secret
 
 ---
 
-## 🎯 Google Gemini Models (Dec 2025)
+## 📝 Google Gemini Models (Dec 2025 - Official)
 
-**ACTUAL (Not Deprecated):**
+**ACTUAL (Supported):**
 
 | Model | Code | Best For |
 |-------|------|----------|
@@ -137,17 +132,17 @@ python -m core.orchestrators.pipeline_orchestrator \
 
 ---
 
-## 📁 Project Structure
+## 🎬 Project Structure
 
 ```
 content-factory/
 ├── core/
 │   ├── generators/
-│   │   ├── script_generator.py        ✅ DONE
-│   │   ├── tts_generator.py           🔜 Edge-TTS
-│   │   └── video_renderer.py          🔜 moviepy
+│   │   ├── script_generator.py       ✅ DONE
+│   │   ├── tts_generator.py          🔜 Edge-TTS
+│   │   └── video_renderer.py         🔜 moviepy
 │   ├── orchestrators/
-│   │   └── pipeline_orchestrator.py   ✅ DONE
+│   │   └── pipeline_orchestrator.py  ✅ DONE
 │   └── utils/
 │       ├── config_loader.py
 │       ├── model_router.py
@@ -160,9 +155,9 @@ content-factory/
 ├── .github/workflows/
 │   └── part1-test.yml
 ├── requirements.txt
-├── QUICK-START.md                    ← START HERE
-├── PART2_PART3_CRITICAL_TZ.md         ← For AI agent
-└── output/                            (auto-created)
+├── QUICK-START.md                 ← START HERE
+├── PART2_PART3_CRITICAL_TZ.md     ← For AI agent
+└── output/                         (auto-created)
 ```
 
 ---
@@ -181,18 +176,18 @@ print('✅ Script generated')
 "
 
 # Part 2 (TTS) - In progress 🔜
-# See QUICK-START.md for testing
+# See QUICK-START.md
 
 # Part 3 (Video) - In progress 🔜
-# See QUICK-START.md for testing
+# See QUICK-START.md
 ```
 
 ---
 
 ## 🔗 Links
 
-- **API Docs:** [ai.google.dev](https://ai.google.dev)
-- **Models List:** [ai.google.dev/gemini-api/docs/models](https://ai.google.dev/gemini-api/docs/models)
+- **Google AI Studio:** [ai.google.dev](https://ai.google.dev)
+- **Models Documentation:** [ai.google.dev/gemini-api/docs/models](https://ai.google.dev/gemini-api/docs/models)
 - **Deprecations:** [ai.google.dev/gemini-api/docs/deprecations](https://ai.google.dev/gemini-api/docs/deprecations)
 - **Edge-TTS:** [github.com/rany2/edge-tts](https://github.com/rany2/edge-tts)
 - **moviepy:** [zulko.github.io/moviepy](https://zulko.github.io/moviepy)
@@ -208,4 +203,4 @@ print('✅ Script generated')
 ---
 
 **Status:** 🔜 Part 2 TTS + Part 3 Video In Progress  
-**Last Update:** Dec 12, 2025 (Gemini models verified from official docs)
+**Last Updated:** Dec 12, 2025 (Gemini models verified from official docs)
