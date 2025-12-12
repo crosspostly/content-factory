@@ -113,16 +113,7 @@ jobs:
           NEW_ACCESS_TOKEN: ${{ steps.refresh.outputs.new_token }}
           NEW_REFRESH_TOKEN: ${{ steps.refresh.outputs.new_refresh_token }}
         run: |
-          # К сожалению, GitHub API не позволяет обновлять Secrets программно
-          # из соображений безопасности.
-          # 
-          # Варианты:
-          # 1. Вручную скопировать токены
-          # 2. Использовать GitHub CLI (требует push access)
-          # 3. Использовать Actions Secrets API (требует Personal Access Token)
-          # 4. Хранить в переменной окружения для текущего workflow
-          
-          echo "\n📌 НОВЫЙ ACCESS TOKEN (скопируй в GitHub Secrets):"
+          echo "📌 НОВЫЙ ACCESS TOKEN (скопируй в GitHub Secrets):"
           echo "================================"
           echo "$NEW_ACCESS_TOKEN"
           echo "================================"
@@ -136,7 +127,9 @@ jobs:
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           NEW_ACCESS_TOKEN: ${{ steps.refresh.outputs.new_token }}
+          NEW_REFRESH_TOKEN: ${{ steps.refresh.outputs.new_refresh_token }}
           EXPIRES_IN: ${{ steps.refresh.outputs.expires_in }}
         run: |
           python3 << 'PYTHON_SCRIPT'
@@ -145,48 +138,37 @@ jobs:
           from datetime import datetime, timedelta
           
           new_token = os.getenv('NEW_ACCESS_TOKEN')
+          new_refresh = os.getenv('NEW_REFRESH_TOKEN')
           expires_in = int(os.getenv('EXPIRES_IN', '3600'))
+          repo = os.getenv('REPO')
           expires_at = (datetime.now() + timedelta(seconds=expires_in)).isoformat()
           
-          issue_body = f"""## 🔐 Qwen Token Refreshed
-
-✅ Access Token успешно обновлён!
-
-### Информация
-- **Время обновления:** {datetime.now().isoformat()}
-- **Действует до:** {expires_at}
-- **Действует:** {expires_in} секунд ({expires_in // 3600} часов)
-
-### ⚠️ ВАЖНО!
-
-**GitHub API не позволяет обновлять Secrets программно** из соображений безопасности.
-
-Новый токен находится в log выше.
-
-### Что делать:
-
-1. Открой:
-   https://github.com/${{ github.repository }}/settings/secrets/actions
-
-2. Обнови `QWEN_ACCESS_TOKEN`:
-   ```
-   {new_token}
-   ```
-
-3. Обнови `QWEN_REFRESH_TOKEN`:
-   Скопируй из лога выше
-
-### Альтернатива: Использовать Personal Access Token
-
-Если хочешь автоматизировать полностью:
-1. Создай Personal Access Token (Settings → Developer settings)
-2. Добавь его как Secret: `GH_PAT`
-3. Используй его для обновления Secrets через GitHub CLI
-
----
-
-*Этот workflow запускается каждый день в 2 AM UTC*
-"""
+          # Используем обычные кавычки и экранируем внутренние кавычки
+          issue_body = (
+              '## 🔐 Qwen Token Refreshed\n\n'
+              '✅ Access Token успешно обновлён!\n\n'
+              '### Информация\n'
+              f'- **Время обновления:** {datetime.now().isoformat()}\n'
+              f'- **Действует до:** {expires_at}\n'
+              f'- **Действует:** {expires_in} секунд ({expires_in // 3600} часов)\n\n'
+              '### ⚠️ ВАЖНО!\n\n'
+              '**GitHub API не позволяет обновлять Secrets программно** из соображений безопасности.\n\n'
+              'Новый токен находится в log выше.\n\n'
+              '### Что делать:\n\n'
+              '1. Открой:\n'
+              f'   https://github.com/{repo}/settings/secrets/actions\n\n'
+              '2. Обнови `QWEN_ACCESS_TOKEN`:\n'
+              f'   {new_token}\n\n'
+              '3. Обнови `QWEN_REFRESH_TOKEN`:\n'
+              f'   {new_refresh}\n\n'
+              '### Альтернатива: Использовать Personal Access Token\n\n'
+              'Если хочешь автоматизировать полностью:\n'
+              '1. Создай Personal Access Token (Settings → Developer settings)\n'
+              '2. Добавь его как Secret: `GH_PAT`\n'
+              '3. Используй его для обновления Secrets через GitHub CLI\n\n'
+              '---\n\n'
+              '*Этот workflow запускается каждый день в 2 AM UTC*'
+          )
           
           # Создаём issue с информацией о новом токене
           result = subprocess.run(
@@ -197,8 +179,7 @@ jobs:
                   '--label', 'qwen,token-refresh,automation'
               ],
               capture_output=True,
-              text=True,
-              env={**os.environ, 'GH_TOKEN': os.getenv('GH_TOKEN')}
+              text=True
           )
           
           if result.returncode == 0:
@@ -219,5 +200,5 @@ jobs:
           echo ""
           echo "### 📝 Reminder"
           echo "Manually update GitHub Secrets with new tokens:"
-          echo "- `QWEN_ACCESS_TOKEN`: ${{ steps.refresh.outputs.new_token }}"
-          echo "- `QWEN_REFRESH_TOKEN`: ${{ steps.refresh.outputs.new_refresh_token }}"
+          echo "- \`QWEN_ACCESS_TOKEN\`: ${{ steps.refresh.outputs.new_token }}"
+          echo "- \`QWEN_REFRESH_TOKEN\`: ${{ steps.refresh.outputs.new_refresh_token }}"
