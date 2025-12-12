@@ -48,13 +48,13 @@ def main(args: argparse.Namespace) -> int:
         from core.generators import script_generator
 
         if args.mode == "shorts":
-            script: Any = script_generator.generate_short(config, args.date)
+            script: Any = script_generator.generate_short(config, target_date=args.date)
         elif args.mode == "long_form":
-            script = script_generator.generate_long_form(config, args.date)
+            script = script_generator.generate_long_form(config, target_date=args.date)
         elif args.mode == "ad":
             if not args.product_id:
                 raise ValueError("--product-id is required for mode=ad")
-            script = script_generator.generate_ad(config, args.product_id)
+            script = script_generator.generate_ad(config, product_id=args.product_id)
         else:
             raise ValueError(f"Unknown mode: {args.mode}")
 
