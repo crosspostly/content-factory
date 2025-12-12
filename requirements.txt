@@ -1,0 +1,8 @@
+# The Part 1 implementation is stdlib-only.
+# Optional dependencies (used in later parts of the pipeline):
+# PyYAML
+# pydantic
+# python-dotenv
+# google-generativeai
+# openai
+# ollama
