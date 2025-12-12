@@ -1,0 +1,7 @@
+2025-12-12T15:55:00.000Z ERROR:
+Traceback (most recent call last):
+  File "tests/test_pipeline.py", line 42, in test_script_generation
+    assert len(script) > 0
+AssertionError: Empty script generated
+
+The command exited with code 1

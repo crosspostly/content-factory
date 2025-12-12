@@ -92,7 +92,12 @@ def mock_config():
             "language": "russian",
         },
         "content_strategy": {},
-        "generation": {},
+        "generation": {
+            "primary_model": "gemini-2.5-flash",
+            "fallback_models": ["gemini-2.5-flash-lite"],
+            "temperature": 0.7,
+            "max_retries": 2,
+        },
         "audio": {
             "engines": {
                 "edge-tts": {
@@ -118,3 +123,62 @@ def mock_config():
     }
     
     return ProjectConfig(config_dict)
+
+
+@pytest.fixture
+def mock_config_with_qwen():
+    """Mock ProjectConfig configured for Qwen (Ollama) with Gemini fallback."""
+    from core.utils.config_loader import ProjectConfig
+    
+    config_dict = {
+        "project": {
+            "name": "test_project",
+            "language": "english",
+        },
+        "content_strategy": {},
+        "generation": {
+            "primary_model": "qwen2.5-coder:1.5b",
+            "fallback_models": ["gemini-2.5-flash"],
+            "temperature": 0.7,
+            "max_retries": 2,
+            "retry_delay_sec": 1.0,
+        },
+        "audio": {
+            "engines": {
+                "edge-tts": {
+                    "voice": "en-US-AriaNeural",
+                    "speed": 1.0,
+                }
+            }
+        },
+        "video": {
+            "resolution": {
+                "shorts": "1080x1920",
+                "long_form": "1920x1080",
+            }
+        },
+        "subtitles": {},
+        "upload": {
+            "platforms": []
+        },
+        "caching": {},
+        "monitoring": {
+            "telegram_notifications": False
+        }
+    }
+    
+    return ProjectConfig(config_dict)
+
+
+@pytest.fixture
+def error_log_fixtures() -> dict[str, str]:
+    """Load error log fixtures for testing."""
+    from pathlib import Path
+    
+    fixtures_dir = Path(__file__).parent / "fixtures" / "error_logs"
+    logs = {}
+    
+    for log_file in fixtures_dir.glob("*.log"):
+        logs[log_file.stem] = log_file.read_text()
+    
+    return logs
