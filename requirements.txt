@@ -10,6 +10,11 @@ pydub==0.25.1
 
 # Part 3: Video Renderer (moviepy)
 moviepy==1.0.3
-imageio-ffmpeg==0.4.10
+imageio-ffmpeg==0.4.9
 Pillow==10.2.0
-numpy==1.24.3
+numpy==1.26.4
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
