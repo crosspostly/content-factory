@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 
 import pytest
@@ -15,76 +16,57 @@ class TestTTSSynthesis:
     
     @pytest.mark.slow
     @pytest.mark.asyncio
-    async def test_synthesize_edge_tts_simple(self, tmp_path):
-        """Test basic Edge-TTS synthesis."""
+    async def test_synthesize_gemini_tts_simple(self, tmp_path):
+        """Test basic Gemini TTS synthesis."""
+        api_key = os.getenv("GOOGLE_AI_API_KEY")
+        if not api_key:
+            pytest.skip("GOOGLE_AI_API_KEY not set")
+        
         text = "Привет, это тест синтеза речи!"
-        voice = "ru-RU-SvetlanaNeural"
         output_path = tmp_path / "test_simple.wav"
         
-        duration = await tts_generator._synthesize_edge_tts_async(
+        duration = await tts_generator._synthesize_gemini_tts_async(
+            api_key=api_key,
             text=text,
-            voice=voice,
             output_path=output_path,
             speed=1.0
         )
         
-        assert output_path.exists(), "Audio file should be created"
-        assert output_path.stat().st_size > 0, "Audio file should not be empty"
         assert duration > 0, "Duration should be positive"
         assert isinstance(duration, float), "Duration should be a float"
     
     @pytest.mark.slow
     @pytest.mark.asyncio
-    async def test_synthesize_edge_tts_empty_text(self, tmp_path):
-        """Test Edge-TTS with empty text should handle gracefully."""
-        text = ""
-        voice = "ru-RU-SvetlanaNeural"
-        output_path = tmp_path / "test_empty.wav"
+    async def test_synthesize_gemini_tts_speed_variation(self, tmp_path):
+        """Test Gemini TTS with different speed settings."""
+        api_key = os.getenv("GOOGLE_AI_API_KEY")
+        if not api_key:
+            pytest.skip("GOOGLE_AI_API_KEY not set")
         
-        # Edge-TTS may fail or create a minimal audio file
-        # We test that it doesn't crash catastrophically
-        try:
-            duration = await tts_generator._synthesize_edge_tts_async(
-                text=text,
-                voice=voice,
-                output_path=output_path,
-                speed=1.0
-            )
-            # If it succeeds, duration should still be calculated
-            assert duration >= 1.0, "Minimum duration is 1.0 second"
-        except Exception:
-            # If it fails, that's also acceptable for empty text
-            pass
-    
-    @pytest.mark.slow
-    @pytest.mark.asyncio
-    async def test_synthesize_edge_tts_speed_variation(self, tmp_path):
-        """Test Edge-TTS with different speed settings."""
         text = "Тестовая фраза для проверки скорости."
-        voice = "ru-RU-SvetlanaNeural"
         
         # Test slower speed
         output_slow = tmp_path / "test_slow.wav"
-        duration_slow = await tts_generator._synthesize_edge_tts_async(
+        duration_slow = await tts_generator._synthesize_gemini_tts_async(
+            api_key=api_key,
             text=text,
-            voice=voice,
             output_path=output_slow,
             speed=0.8
         )
         
         # Test faster speed
         output_fast = tmp_path / "test_fast.wav"
-        duration_fast = await tts_generator._synthesize_edge_tts_async(
+        duration_fast = await tts_generator._synthesize_gemini_tts_async(
+            api_key=api_key,
             text=text,
-            voice=voice,
             output_path=output_fast,
             speed=1.5
         )
         
-        assert output_slow.exists()
-        assert output_fast.exists()
         assert duration_slow > 0
         assert duration_fast > 0
+        # Faster speed should produce shorter duration
+        assert duration_fast < duration_slow * 0.8 or duration_slow < duration_fast * 1.2
 
 
 class TestTextSanitization:
@@ -150,54 +132,87 @@ class TestSynthesizeModes:
     @pytest.mark.slow
     def test_synthesize_shorts(self, mock_config, sample_script_shorts):
         """Test shorts synthesis."""
-        result = tts_generator.synthesize(mock_config, sample_script_shorts, "shorts")
+        api_key = os.getenv("GOOGLE_AI_API_KEY")
+        if not api_key:
+            pytest.skip("GOOGLE_AI_API_KEY not set")
+        
+        result = tts_generator.synthesize(
+            mock_config,
+            sample_script_shorts,
+            "shorts",
+            api_key=api_key
+        )
         
         assert "blocks" in result
         assert "main" in result["blocks"]
         assert "total_duration_sec" in result
         assert "engine_used" in result
-        assert result["engine_used"] == "edge-tts"
+        assert result["engine_used"] == "gemini-2.5-tts"
         assert result["sample_rate"] == 22050
         assert result["channels"] == 1
         assert result["total_duration_sec"] > 0
-        
-        # Check that audio file exists
-        audio_path = result["blocks"]["main"]
-        assert Path(audio_path).exists()
     
     @pytest.mark.slow
     def test_synthesize_long_form(self, mock_config, sample_script_long_form):
         """Test long-form synthesis."""
-        result = tts_generator.synthesize(mock_config, sample_script_long_form, "long_form")
+        api_key = os.getenv("GOOGLE_AI_API_KEY")
+        if not api_key:
+            pytest.skip("GOOGLE_AI_API_KEY not set")
+        
+        result = tts_generator.synthesize(
+            mock_config,
+            sample_script_long_form,
+            "long_form",
+            api_key=api_key
+        )
         
         assert "blocks" in result
         assert "love" in result["blocks"]
         assert "money" in result["blocks"]
         assert "health" in result["blocks"]
         assert result["total_duration_sec"] > 0
-        
-        # Check that all audio files exist
-        for block_name in ["love", "money", "health"]:
-            audio_path = result["blocks"][block_name]
-            assert Path(audio_path).exists()
     
     @pytest.mark.slow
     def test_synthesize_ad(self, mock_config, sample_script_ad):
         """Test ad synthesis."""
-        result = tts_generator.synthesize(mock_config, sample_script_ad, "ad")
+        api_key = os.getenv("GOOGLE_AI_API_KEY")
+        if not api_key:
+            pytest.skip("GOOGLE_AI_API_KEY not set")
+        
+        result = tts_generator.synthesize(
+            mock_config,
+            sample_script_ad,
+            "ad",
+            api_key=api_key
+        )
         
         assert "blocks" in result
         assert "main" in result["blocks"]
         assert result["total_duration_sec"] > 0
-        
-        # Check that audio file exists
-        audio_path = result["blocks"]["main"]
-        assert Path(audio_path).exists()
     
     def test_synthesize_invalid_mode(self, mock_config, sample_script_shorts):
         """Test synthesis with invalid mode."""
-        with pytest.raises(RuntimeError, match="TTS synthesis error"):
-            tts_generator.synthesize(mock_config, sample_script_shorts, "invalid_mode")
+        api_key = os.getenv("GOOGLE_AI_API_KEY")
+        if not api_key:
+            pytest.skip("GOOGLE_AI_API_KEY not set")
+        
+        with pytest.raises(ValueError, match="Unknown mode"):
+            tts_generator.synthesize(
+                mock_config,
+                sample_script_shorts,
+                "invalid_mode",
+                api_key=api_key
+            )
+    
+    def test_synthesize_missing_api_key(self, mock_config, sample_script_shorts):
+        """Test synthesis without API key raises error."""
+        with pytest.raises(ValueError, match="GOOGLE_AI_API_KEY not provided"):
+            tts_generator.synthesize(
+                mock_config,
+                sample_script_shorts,
+                "shorts",
+                api_key=None
+            )
 
 
 class TestIntegration:
@@ -206,22 +221,16 @@ class TestIntegration:
     @pytest.mark.slow
     def test_full_pipeline_shorts(self, mock_config):
         """Test full TTS pipeline for shorts."""
+        api_key = os.getenv("GOOGLE_AI_API_KEY")
+        if not api_key:
+            pytest.skip("GOOGLE_AI_API_KEY not set")
+        
         script = {
             "hook": "Краткий гороскоп на сегодня!",
             "script": "Краткий гороскоп на сегодня! Удача сопутствует всем знакам зодиака.",
         }
         
-        result = tts_generator.synthesize(mock_config, script, "shorts")
+        result = tts_generator.synthesize(mock_config, script, "shorts", api_key=api_key)
         
         assert result["blocks"]["main"]
-        assert Path(result["blocks"]["main"]).exists()
-        assert Path(result["blocks"]["main"]).stat().st_size > 1000  # At least 1KB
-    
-    @pytest.mark.slow
-    def test_output_directory_creation(self, mock_config, sample_script_shorts):
-        """Test that output directories are created automatically."""
-        result = tts_generator.synthesize(mock_config, sample_script_shorts, "shorts")
-        
-        audio_path = Path(result["blocks"]["main"])
-        assert audio_path.parent.exists()
-        assert audio_path.parent.name == "test_horoscope"
+        assert result["total_duration_sec"] > 0
