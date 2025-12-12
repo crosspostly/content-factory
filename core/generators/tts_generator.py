@@ -18,7 +18,7 @@ def _write_silence_wav(path: Path, *, duration_sec: float = 1.0, sample_rate: in
         wf.writeframes(b"\x00\x00" * nframes)
 
 
-def synthesize(config: ProjectConfig, script: Any, mode: str) -> dict[str, Path]:
+def synthesize(config: ProjectConfig, script: Any, mode: str) -> dict[str, Any]:
     """Synthesize speech.
 
     Part 2 will implement real TTS engines. For Part 1 we generate a short
@@ -31,4 +31,10 @@ def synthesize(config: ProjectConfig, script: Any, mode: str) -> dict[str, Path]
     audio_path = out_dir / f"{mode}.wav"
     _write_silence_wav(audio_path)
 
-    return {"main": audio_path}
+    return {
+        "blocks": {"main": str(audio_path)},
+        "background_music_path": None,
+        "sound_effects": {},
+        "engine_used": "placeholder",
+        "total_duration_sec": 1.0,
+    }

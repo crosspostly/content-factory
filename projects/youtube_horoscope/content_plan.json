@@ -1,0 +1,24 @@
+{
+  "content_plan": [
+    {
+      "id": "short_20241201_aries",
+      "type": "shorts",
+      "date": "2024-12-01",
+      "sign": "aries",
+      "topic": "daily_horoscope",
+      "status": "planned"
+    },
+    {
+      "id": "long_form_20240101",
+      "type": "long_form",
+      "date": "2024-01-01",
+      "topic": "weekly_horoscope",
+      "status": "planned"
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "last_updated": "2024-12-12",
+    "total_planned": 2
+  }
+}

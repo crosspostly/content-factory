@@ -1,0 +1,8 @@
+Attention-grabbing hooks for YouTube Shorts horoscope content.
+Used to capture viewer attention in the first few seconds.
+
+Examples:
+- "Твой знак зодиака предупреждает..."
+- "Срочно! Гороскоп на день..."
+- "Что звезды говорят о тебе?"
+- "Не пропусти этот знак зодиака!"
