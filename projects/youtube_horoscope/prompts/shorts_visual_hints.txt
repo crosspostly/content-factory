@@ -1,0 +1,16 @@
+Visual guidelines for YouTube Shorts horoscope content.
+Describes the style, colors, and visual elements to use.
+
+Visual Style:
+- Mystical/celestial theme
+- Gold and purple color palette
+- Zodiac symbols and tarot cards
+- Starfield backgrounds
+- Smooth transitions between zodiac signs
+
+Key Elements:
+- Zodiac wheel animation
+- Constellation graphics
+- Tarot card imagery
+- Ambient particle effects
+- Text overlays with shadow effect
