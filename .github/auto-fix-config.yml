@@ -1,55 +1,43 @@
 # Auto-Fix Agent Configuration
-# Change settings here to control the auto-fix agent behavior
-# No need to edit the workflow file!
+# This agent is ALWAYS ENABLED and creates Pull Requests with fixes
+# You manually review and merge the PRs
 
 auto_fix:
-  # Enable/disable auto-commit of fixes
-  # WARNING: Set to true only if you're confident in Gemini's fixes!
-  # false = create issue with suggested fix (safe, manual review required)
-  # true = auto-commit fixes directly to repo (use with caution!)
-  auto_commit: false
+  # ALWAYS ENABLED - Creates PR on every failure
+  # Workflow is triggered automatically on workflow failures
+  # No need to change anything here!
+  enabled: true
 
-  # Enable/disable issue creation on failures
+  # Enable/disable GitHub issue creation
+  # true = create issue with analysis + create PR with fix
+  # false = only create issue, no PR
   create_issue: true
+
+  # Gemini model - using fastest 2.5 Flash
+  # Options: gemini-2.5-flash (fast), gemini-2.0-pro (smarter)
+  model: gemini-2.5-flash
 
   # Minimum severity level to trigger auto-fix
   # Options: critical, high, medium, low
-  min_severity: medium
+  min_severity: low  # Fix all failures
 
-  # Skip auto-fix for specific workflows
-  skip_workflows:
-    # - "Build and Push Docker Image"
+workflow:
+  # Which workflows trigger auto-fix
+  triggers:
+    - "Generate Content (Part 1 MVP)"
+    - "test"
 
-  # Auto-fix only for specific branches
-  allowed_branches:
-    - main
-    - develop
-
-  # Gemini model to use
-  # Options: gemini-2.5-flash (fast), gemini-2.0-pro (smarter), gemini-1.5-pro (slower)
-  model: gemini-2.5-flash
-
-  # Enable AI-generated code commits
-  # false = only create issues with suggestions
-  # true = auto-commit code changes
-  auto_commit_code: false
-
-notifications:
-  # Slack notification on failures (optional)
-  slack_webhook: null  # Set to your webhook URL
-  notify_on_fix: true
-  notify_on_issue_creation: true
-
-# Logging and debugging
 logging:
-  # Save full analysis to artifacts
+  # Save analysis to artifacts for debugging
   save_analysis: true
   verbose: false
 
-# Example of enabling auto-commit:
-# Just change 'false' to 'true' below:
+# How it works:
+# 1. Workflow fails
+# 2. Auto-Fix Agent automatically starts
+# 3. Gemini 2.5 analyzes the error
+# 4. Creates GitHub Issue with detailed analysis
+# 5. If auto-fix possible: Creates PR with code changes
+# 6. You review PR and manually merge
 #
-# auto_fix:
-#   auto_commit: true  # ← CHANGE THIS TO ENABLE AUTO-FIX!
-#
-# Then commit and push. The next failure will be auto-fixed!
+# This is the SAFE approach - you're always in control!
