@@ -1,0 +1,34 @@
+name: Qwen Code CI/CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Task for Qwen Code'
+        required: true
+        default: 'Analyze and summarize this repository'
+
+jobs:
+  qwen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Qwen Code
+        run: npm install -g @qwen-code/qwen-code@latest
+
+      - name: Run Qwen Code Task
+        env:
+          OPENAI_API_KEY: ${{ secrets.QWEN_REFRESH_TOKEN }}
+          OPENAI_BASE_URL: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+          OPENAI_MODEL: 'qwen3-coder-plus'
+        run: |
+          # In non-interactive mode, Qwen Code automatically uses OpenAI-compatible API
+          echo "Running Qwen Code with DashScope API..."
+          echo "${{ github.event.inputs.task }}" | qwen --yolo
