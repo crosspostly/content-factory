@@ -48,12 +48,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt 2>/dev/null || echo "No requirements.txt, skipping"
       
-      - name: 🎬 Generate Content (Mode: ${{ github.event.inputs.mode || 'shorts' }})
+      -       - name: 🎬 Generate Content (Mode: ${{ github.event.inputs.mode || 'shorts' }})
         run: |
           python -m core.orchestrators.pipeline_orchestrator \
             --project ${{ github.event.inputs.project || 'youtube_horoscope' }} \
             --mode ${{ github.event.inputs.mode || 'shorts' }} \
-            ${{ (github.event.inputs.dry_run == 'true' && '--dry-run') || '--upload' }}
+            ${{ github.event.inputs.dry_run == 'false' && '--upload' || '--dry-run' }}
         env:
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
