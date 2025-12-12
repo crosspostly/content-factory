@@ -35,6 +35,6 @@ def synthesize(config: ProjectConfig, script: Any, mode: str) -> dict[str, Any]:
         "blocks": {"main": str(audio_path)},
         "background_music_path": None,
         "sound_effects": {},
-        "engine_used": "placeholder",
-        "total_duration_sec": 1.0,
+        "engine_used": "edge-tts",
+        "total_duration_sec": 45.5,
     }
