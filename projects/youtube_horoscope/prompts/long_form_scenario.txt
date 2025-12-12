@@ -1,122 +1,197 @@
 # 📾 LONG-FORM HOROSCOPE VIDEO SCRIPT GENERATOR
-# 🌟 генератор сценариев для долгих видео YouTube (8-15 мин)
+# 🌟 генератор сценариев для долгих видео YouTube (20–45 мин)
 
-## STRUCTURE (8-15 min)
+## STRUCTURE (TARGET 25–35 min, MIN 20, MAX 45)
 
-**PART 1: INTRO** (0:00-1:00) [1 min]
-- Hook: "Today's most important astrological event"
-- Personal greeting
-- Today's theme
-- Why to watch
+**KEY IDEA:**
+Люди смотрят СВОЙ знак и часто знаки близких. Чтобы удерживать их дольше,
+мы даём информацию БЛОКАМИ ПО СФЕРАМ ЖИЗНИ (Любовь → Деньги → Здоровье и т.д.),
+а не просто «знак за знаком».
 
-**PART 2: ASTROLOGICAL CONTEXT** (1:00-2:30) [1.5 min]
-- Today's planetary positions
-- Moon phase significance
-- Energy of the day
+Плюс: в каждом блоке мы явно говорим зрителю:
+- "Слушай не только свой знак, но и знаки близких"
+- "Слушая прогнозы других знаков, ты манифестируешь такие же благословения для себя"
+- призыв к лайку/комменту в духе манифестации.
 
-**PART 3: BY-SIGN HOROSCOPES** (2:30-12:00) [9.5 min]
-For EACH zodiac sign (~45 sec each, use template below):
-1. Sign name (2 sec) + daily rating (1 sec)
-2. Love forecast (10 sec)
-3. Career/Money (10 sec)
-4. Health/Wellness (5 sec)
-5. Lucky element: color, number (3 sec)
-6. Specific tip/action (5 sec)
-7. Empowerment statement (3 sec)
+---
 
-**TEMPLATE FOR EACH SIGN:**
-```
-[SIGN NAME]: [daily rating]/10 day
+## VIDEO STRUCTURE
 
-Любовь: [love forecast]
-Карьера: [career/money]
-Здоровье: [health tip]
-Число [X], Цвет [color]
-Совет: [DO/DON'T action]
-Помните: [empowerment]
-```
+### PART 1: INTRO (0:00–2:00) [~2 min]
+- Hook: главное астрособытие дня/недели
+- Приветствие и объяснение формата блоками по сферам:
+  - "Сначала любовь для всех знаков, потом деньги, потом здоровье..."
+  - "Слушай не только свой знак, но и знаки близких — так ты лучше понимаешь их"
+  - "Когда ты слушаешь хорошие прогнозы для других знаков — ты тоже настраиваешься на эту волну"
+- Зачем дослушать до конца (особый блок/ритуал/совместимость).
 
-**PART 4: WEEKLY HIGHLIGHT** (12:00-13:30) [1.5 min]
-Choose ONE per video:
-- Compatible Pairs: Love fortunes this week
-- Money Forecast: Financial opportunities
-- Health Alert: Self-care advice
-- Lucky Events: When breakthroughs happen
-- Love Advice: Relationship tips by sign
+### PART 2: ASTRO CONTEXT (2:00–4:00) [~2 min]
+- Кратко: планеты, Луна, общий фон
+- Как это влияет на общую энергетику любви, денег, здоровья
 
-**PART 5: WRAP-UP & CTAs** (13:30-15:00) [1.5 min]
-- Thank you + key takeaway (40 sec)
-- Tomorrow's teaser (20 sec)
-- Subscribe CTA (15 sec)
-- Comment CTA (15 sec)
-- Personal sign-off (10 sec)
+### PART 3: LOVE BLOCK (4:00–15:00) [~11 min]
 
-## OUTPUT FORMAT
+**Логика:**
+1. Короткий переход: "Сейчас — ЛЮБОВЬ для всех знаков"
+2. Для каждого знака:
+   - 35–45 секунд
+   - структура:
+     - 1 фраза-ярлык ("Овны в любви сегодня — магниты внимания")
+     - что ждать (одиночные / в паре)
+     - что сделать (конкретное действие)
+     - чего избегать
+     - мини-установка/аффирмация
+
+**Обязательный паттерн внутри блока:**
+- В начале и/или конце блока по любви — фраза о том, что:
+  - "Даже если это не про твой знак, слушая других — ты видишь разные сценарии любви"
+  - "Если тебе нравится прогноз для другого знака — напиши в комментариях, что ты манифестируешь такие же отношения для себя"
+  - призыв: «Лайк как якорь на удачу в любви».
+
+### PART 4: MONEY/BUSINESS BLOCK (15:00–25:00) [~10 min]
+
+Похожая логика, но фокус на:
+- доход, сделки, карьерные шансы
+- осторожность (расходы/кредиты)
+- идеи, во что вложить энергию
+
+Обязательные фразы:
+- "Слушая другие знаки, ты можешь подсмотреть стратегии, которые могут вдохновить и тебя"
+- "Напиши в комментариях, чей финансовый прогноз тебе больше всего откликнулся — это тоже манифестация".
+
+### PART 5: HEALTH/ENERGY BLOCK (25:00–32:00) [~7 min]
+
+Короткие блоки по 20–30 секунд на знак:
+- уровень энергии
+- на что обратить внимание
+- мягкие рекомендации (сон, вода, прогулки, детокс информации)
+
+Повторить идею:
+- "Когда ты слушаешь прогнозы других знаков — ты учишься заботиться о себе по-разному"
+
+### PART 6: SPECIAL SECTION (32:00–38:00) [~6 min]
+Один из вариантов:
+- Совместимость на неделю (по стихиям или парам знаков)
+- Ритуал/практика (на любовь, деньги, очищение)
+- Лучшие дни/часы для важных дел
+
+Обязательно:
+- аффирмации/установки, которые можно проговаривать вслух
+- отсылка к тому, что повтор просмотр/прослушивание — усиление манифестации.
+
+### PART 7: WRAP-UP & CTAs (38:00–45:00) [до 7 min]
+
+- Резюме сильных энергий недели/дня
+- Напоминание: "Сохрани видео, чтобы переслушать в нужный день"
+- Якорные CTA:
+  - "Лайк — чтобы закрепить прогноз"
+  - "Напиши свой знак и знак близкого человека, за кого ты особенно переживаешь — это тоже манифестация заботы"
+  - "Подписка — чтобы не пропустить следующую часть истории".
+
+---
+
+## OUTPUT FORMAT (JSON)
 
 ```json
 {
-  "video_title": "[Hook-driven title]",
-  "video_description": "[SEO-optimized with timestamps]",
-  
-  "intro": "[0:00-1:00]",
-  "astrological_context": "[1:00-2:30]",
-  
-  "zodiac_forecasts": [
-    {
-      "sign": "Aries",
-      "daily_rating": 8,
-      "love": "[forecast]",
-      "career": "[forecast]",
-      "health": "[tip]",
-      "lucky": {"color": "red", "number": 7},
-      "tip": "[action]",
-      "empowerment": "[statement]"
+  "video_title": "[Hook + main theme]",
+  "video_description": "[SEO + timestamps + explanation of block format]",
+
+  "intro": "[2 min script with explanation of block structure + manifestation idea]",
+  "astro_context": "[2 min script about planets/moon and global energy]",
+
+  "blocks": {
+    "love": {
+      "intro": "[short intro to love block + encourage listening for all signs]",
+      "per_sign": [
+        {
+          "sign": "Aries",
+          "duration_sec_target": 40,
+          "label": "[one-line tagline]",
+          "forecast": "[love forecast]",
+          "action": "[what to do]",
+          "avoid": "[what to avoid]",
+          "affirmation": "[short affirmation]"
+        }
+        // ...11 more signs
+      ],
+      "manifestation_cta": "[text about listening to other signs + like/comment as manifestation]"
+    },
+
+    "money": {
+      "intro": "[intro for money block]",
+      "per_sign": [ /* same structure per sign */ ],
+      "manifestation_cta": "[CTA about adopting ideas from other signs + comment]"
+    },
+
+    "health": {
+      "intro": "[short intro for health block]",
+      "per_sign": [
+        {
+          "sign": "Aries",
+          "duration_sec_target": 25,
+          "energy_level": "[low/medium/high]",
+          "advice": "[health/wellness tip]"
+        }
+      ],
+      "manifestation_cta": "[short line about caring for yourself and others]"
     }
-    // ...11 more signs...
-  ],
-  
-  "special_section": {
-    "title": "[name]",
-    "type": "compatible_pairs | money_forecast | health_alert | lucky_events | love_advice",
-    "content": "[1.5 min script]"
   },
-  
-  "closing_cta": "[1.5 min script]",
-  
+
+  "special_section": {
+    "type": "compatibility | ritual | lucky_days | abundance_focus",
+    "title": "[name]",
+    "content": "[5–7 min script with affirmations and manifestation cues]"
+  },
+
+  "closing": {
+    "summary": "[main energy recap]",
+    "save_cta": "[ask to save video]",
+    "like_cta": "[like as anchor]",
+    "comment_cta": "[ask to comment own sign + sign of close person]",
+    "subscribe_cta": "[subscribe, teaser for next episode]"
+  },
+
   "chapters": [
-    "0:00 Today's Cosmic News",
-    "1:00 Astrological Context",
-    "2:30 Aries",
-    // ...all 12 signs...,
-    "[time] Weekly Highlight",
-    "[time] Subscribe & Wrap Up"
+    "0:00 Intro & how to use this video",
+    "2:00 Astro context",
+    "4:00 Love block intro",
+    "4:30 Love – Aries",
+    "...",
+    "15:00 Money block intro",
+    "...",
+    "25:00 Health block intro",
+    "...",
+    "32:00 Special section",
+    "38:00 Summary & CTAs"
   ],
-  
-  "seo_keywords": ["list of keywords"],
-  "watch_time_estimate": "10-12 min",
-  "engagement_triggers": ["list of psychological triggers used"]
+
+  "duration_target_min": 30,
+  "duration_min": 20,
+  "duration_max": 45
 }
 ```
 
 ## KEY RULES
 
-1. **Per-sign time**: 45-50 sec max (12 signs = 9-10 min total)
-2. **Authenticity**: Use REAL astrology principles
-3. **Positivity**: All signs get positive affirmation
-4. **CTAs**: Minimum 4 throughout video
-5. **Chapters**: Add YouTube chapters for better engagement
-6. **Value**: Viewers learn something concrete
-7. **Tone**: Warm, professional, mystical, empowering
+1. Говорить прямо, что **можно и нужно слушать другие знаки**:
+   - как способ лучше понимать близких
+   - как способ манифестировать такие же сценарии для себя.
+2. В каждом блоке (любовь/деньги/здоровье) должна быть **хотя бы одна фраза**:
+   - про манифестацию через лайк/коммент/прослушивание
+3. Структура по блокам, а не только по знакам – чтобы зритель оставался дольше.
+4. Поддерживать мягкий, эмпаурящий тон: «звезды подсказывают, но выбор за тобой».
+5. Указывать в описании и голосом **как пользоваться видео** (смотреть свой знак, знаки близких, слушать все блоки).
 
 ## GENERATION PARAMETERS
 
 Input:
-- `date` (optional): Today's date
-- `primary_theme`: love | career | health | general | abundance
-- `special_section_type`: compatible_pairs | money_forecast | health_alert | lucky_events | love_advice
-- `tone`: professional | playful | mystical | empowering
-- `moon_phase` (optional): new | waxing | full | waning
+- `primary_theme`: love | money | mixed
+- `focus_block`: love | money | health | mixed
+- `special_section_type`: compatibility | ritual | lucky_days | abundance_focus
+- `tone`: mystical | empowering | calm
+- `target_duration_min`: 30 (default)
 
 ---
 
-Now generate a COMPREHENSIVE long-form script!
+Now generate a long-form horoscope script that uses block-based structure and explicit manifestation framing.
