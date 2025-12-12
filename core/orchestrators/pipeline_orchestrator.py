@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+from collections.abc import Mapping
 from typing import Any
 
 from core.utils import config_loader, logging_utils
@@ -17,10 +18,11 @@ def _get_platforms(config: config_loader.ProjectConfig, platforms_arg: str | Non
     if isinstance(platforms, list):
         return [str(p) for p in platforms]
 
-    if isinstance(platforms, dict):
+    if isinstance(platforms, (dict, Mapping)):
         enabled: list[str] = []
         for name, cfg in platforms.items():
-            if isinstance(cfg, dict) and cfg.get("enabled") is False:
+            # Check if cfg has get method (dict-like) and enabled is False
+            if hasattr(cfg, "get") and cfg.get("enabled") is False:
                 continue
             enabled.append(str(name))
         return enabled
