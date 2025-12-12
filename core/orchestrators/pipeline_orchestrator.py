@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import os
 from collections.abc import Mapping
 from typing import Any
 
@@ -69,7 +70,12 @@ def main(args: argparse.Namespace) -> int:
     try:
         from core.generators import tts_generator
 
-        audio_map = tts_generator.synthesize(config, script, args.mode)
+        # Get API key from environment
+        api_key = os.getenv("GOOGLE_AI_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_AI_API_KEY environment variable not set")
+
+        audio_map = tts_generator.synthesize(config, script, args.mode, api_key=api_key)
     except Exception as e:
         logging_utils.log_error(f"TTS synthesis failed: {e}", e)
         if config.monitoring.telegram_notifications:
