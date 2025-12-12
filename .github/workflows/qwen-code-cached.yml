@@ -1,0 +1,38 @@
+name: Install Qwen Code (Cached)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  install-qwen:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'  # 🔥 Кеширование npm!
+      
+      - name: Cache Qwen Code
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: qwen-code-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            qwen-code-${{ runner.os }}-
+      
+      - name: Install Qwen Code (cached)
+        run: |
+          npm install -g @qwen-code/qwen-code@latest
+          qwen --version
+      
+      - name: Test Qwen
+        env:
+          OPENAI_API_KEY: ${{ secrets.QWEN_ACCESS_TOKEN }}
+          OPENAI_BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1
+          OPENAI_MODEL: qwen-max
+        run: |
+          echo "✅ Qwen Code готов к работе!" | tee -a $GITHUB_STEP_SUMMARY
