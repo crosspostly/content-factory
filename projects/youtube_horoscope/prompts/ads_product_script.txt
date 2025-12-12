@@ -1,0 +1,133 @@
+# 📥 PRODUCT ADVERTISEMENT SCRIPT GENERATOR
+# Генератор сценариев для рекламы в гороскопном контенте
+
+## CONTEXT
+You are creating sponsored/advertisement scripts that blend seamlessly into horoscope content. The product should feel relevant and natural to astrology/zodiac niche. Focus on products that appeal to the target audience: women 18-45 interested in mysticism, wellness, tarot, crystals, astrology apps, etc.
+
+## SPONSORED CONTENT STRATEGY
+
+### Blending Rules
+1. **Not Disruptive**: Ad feels like content, not interruption
+2. **Relevant**: Product connects to horoscope/astrology theme
+3. **Value-Add**: Viewers feel like they learned something
+4. **Authentic**: You genuinely recommend the product
+5. **Ethical**: Clear disclosure that it's sponsored
+
+## PRODUCT CATEGORIES
+
+**Ideal Products:**
+- Crystal/gemstone shops
+- Tarot card decks
+- Astrology apps & software
+- Meditation/wellness apps
+- Jewelry (zodiac-themed)
+- Books on astrology
+- Coaching/readings services
+- Candles/incense
+- Oracle card decks
+- Numerology guides
+
+## AD SCRIPT TYPES
+
+### TYPE 1: SHORTS AD (20-30 sec)
+**Hook**: "This changed how I read horoscopes..."
+**Product mention**: Quick demo/show
+**CTA**: "Link in description"
+**Example**: Crystal product used during tarot reading
+
+### TYPE 2: LONG-FORM AD (60-90 sec IN 10-MIN VIDEO)
+**Placement**: After zodiac sections, before closing
+**Structure**:
+1. Transition (10 sec): "By the way..."
+2. Product intro (15 sec): What it is, why relevant
+3. Personal story (30 sec): How it helped (authentic)
+4. Features (20 sec): Why it's special
+5. Special offer (10 sec): Discount code for viewers
+6. CTA (5 sec): Link in description
+
+### TYPE 3: INTEGRATED AD (15-20 sec DURING CONTENT)
+**Subtlest approach**:
+- Use product while doing reading
+- Mention it casually
+- "Sponsored by X" disclosure
+
+## EXAMPLE AD SCRIPT
+
+**Product**: "StarSeek" Astrology App
+**Duration**: 60 sec
+**Placement**: Long-form video after zodiac readings
+
+```
+[Transition]
+"By the way, many of you ask me: 'How do you track planetary movements so accurately?'
+The answer is this app - StarSeek.
+
+[Product intro]
+It's an astrology app that gives you real-time planetary data,
+moon phases, and personalized horoscopes based on YOUR birth chart.
+I use it every single day.
+
+[Personal story]
+When I first started doing these readings, I was writing everything down.
+Now? StarSeek does the heavy lifting.
+I can focus on giving you meaningful predictions
+instead of checking ephemeris tables.
+
+[Features]
+The best part?
+It works offline, it's beautifully designed,
+and the birth chart calculator is spot-on.
+
+[Special offer]
+If you use code COSMOS2025 - you get 40% off premium for 3 months.
+That's a steal for daily guidance.
+
+[CTA]
+Link is in the description.
+```
+
+## GENERATION PARAMETERS
+
+Input:
+- `product_name`: Name of product
+- `product_category`: crystal/app/book/service/other
+- `product_description`: What it does
+- `target_zodiac_signs`: Which signs benefit most (optional)
+- `ad_format`: shorts/long_form/integrated
+- `tone`: subtle/enthusiastic/educational
+- `discount_code`: Special offer for viewers (optional)
+- `affiliate_link`: If applicable
+
+## OUTPUT FORMAT
+
+```json
+{
+  "ad_format": "[shorts/long_form/integrated]",
+  "duration": "[20-30 sec / 60-90 sec / 15-20 sec]",
+  "product_name": "[name]",
+  "product_link": "[URL]",
+  "discount_code": "[CODE]",
+  "script": "[Full ad script in Russian]",
+  "disclosure": "This is sponsored content",
+  "hook": "[Opening line for maximum attention]",
+  "cta": "[Clear call-to-action]",
+  "visual_hints": "[What should be shown on screen]",
+  "best_zodiac_fit": "[Which signs this benefits most]",
+  "integration_notes": "[Where to place in video]"
+}
+```
+
+## IMPORTANT RULES
+
+1. **Disclosure**: Always clearly state it's sponsored
+2. **Authenticity**: You must genuinely recommend
+3. **Relevance**: Product must fit astrology niche
+4. **No Misleading**: Don't promise horoscopes "guarantee" futures
+5. **Viewer Value**: Viewers get real discount/benefit
+6. **Platform Compliance**: Follow YouTube ad policies
+7. **Frequency**: Max 1 ad per 7 shorts, 1 per long-form
+8. **Transparency**: Affiliate disclosure if applicable
+
+---
+
+Now generate an ad script that feels NATURAL in horoscope content, not forced!

@@ -1,0 +1,273 @@
+# 🎬 YouTube Гороскопы - Configuration v2
+# Проект автоматического генерирования вирусного контента о гороскопах
+
+# ==============================================================================
+# PROJECT METADATA
+# ==============================================================================
+
+project:
+  name: "YouTube Гороскопы"
+  description: "Вирусные видео о гороскопах для YouTube Shorts и YouTube (долгие)"
+  platform: "youtube"
+  priority: 1
+  niche: "astrology"
+  target_audience: "женщины 18-45, интересуются астрологией, гороскопами, знаками зодиака"
+  language: "ru"
+  seo_keywords: 
+    - "гороскопы сегодня"
+    - "астрология"
+    - "прогноз дня"
+    - "знаки зодиака"
+    - "таро"
+
+# ==============================================================================
+# CONTENT STRATEGY
+# ==============================================================================
+
+content_strategy:
+  # Короткие видео (YouTube Shorts + Вертикальные)
+  shorts:
+    schedule: "2x daily"
+    upload_times: ["10:00", "18:00"]  # UTC+3
+    duration: "15-60 seconds"
+    resolution: "1080x1920"
+    fps: 30
+    count_per_week: 14  # 2x7
+    promotion_count: 3
+    promotion_type: "teaser_to_long_form"
+    
+  # Длинные видео (YouTube)
+  long_form:
+    schedule: "1x weekly"
+    upload_day: "Monday"
+    upload_time: "19:00"  # UTC+3
+    duration: "8-15 minutes"
+    resolution: "1920x1080"
+    fps: 30
+    count_per_week: 1
+    
+  # Контент с рекламой
+  ads:
+    enabled: true
+    folder: "ads/"
+    strategy: "sponsored_content_blend"
+    frequency: 1  # per 7 shorts
+
+# ==============================================================================
+# AI GENERATION SETTINGS
+# ==============================================================================
+
+generation:
+  model: "gemma3:4b"  # Локально или Gemini 2.5 Flash
+  temperature: 0.8
+  max_retries: 3
+  
+  prompt_files:
+    shorts_script: "prompts/shorts_scenario.txt"
+    shorts_hooks: "prompts/shorts_hooks.txt"
+    shorts_visual_hints: "prompts/shorts_visual_hints.txt"
+    long_form_script: "prompts/long_form_scenario.txt"
+    ad_script: "prompts/ads_product_script.txt"
+
+# ==============================================================================
+# AUDIO SETTINGS - UNIFIED CONFIG
+# ==============================================================================
+
+audio:
+  # ОСНОВНОЙ ДВИЖОК ДЛЯ TTS
+  primary_engine: "edge-tts"  # edge-tts или gemini-tts
+  fallback_engine: "gemini-tts"  # Если primary упадет
+  
+  # КОНФИГ ДЛЯ ВСЕХ ДВИЖКОВ
+  engines:
+    edge_tts:
+      enabled: true
+      # Голоса Edge-TTS (SSML voice names)
+      voices:
+        female_neutral: "ru-RU-DariyaNeural"       # Нейтральный женский
+        female_warm: "ru-RU-SvetlanaNeural"       # Теплый женский  
+        female_mysterious: "ru-RU-DariyaNeural"   # Для мистических моментов (same voice, different prosody)
+      speed: 1.1  # Немного быстрее для затягивающего эффекта
+      pitch: 0    # 0 = normal
+      
+    gemini_tts:
+      enabled: true
+      model: "gemini-2.5-flash"  # Или позже «gemini-2.5-pro-audio»
+      # Голоса Gemini TTS (названия из Gemini API docs)
+      voices:
+        female_neutral: "Gladia"        # Женский нейтральный
+        female_warm: "Stella"          # Теплый женский
+        female_mysterious: "Luna"      # Мистический (если доступен)
+      language: "ru"
+      speed_rate: 1.0
+      pitch: 0
+      # ВАЖНО: Gemini TTS имеет лимит бесплатных запросов!
+      # Примерно 100-200 запросов в день бесплатно (проверить в документации)
+      # Рекомендуется использовать для long-form, Edge-TTS для shorts
+  
+  # ПРАВИЛА ВЫБОРА ГОЛОСА
+  voice_selection:
+    shorts: "edge-tts"          # Shorts = быстро, Edge-TTS экономит квоту Gemini
+    long_form: "gemini-tts"     # Long-form = качество, используем Gemini
+    ads: "edge-tts"             # Реклама = экономно
+  
+  # МУЗЫКАЛЬНЫЕ НАСТРОЙКИ
+  background_music:
+    enabled: true
+    volume: 0.3  # 30% музыки, 70% голоса
+    style: "mysterious_ambient"  # Таинственная амбиентная музыка
+    sources:
+      - "epidemic_sound"  # Платная библиотека (лучшее качество)
+      - "pixabay_music"   # Бесплатная (https://pixabay.com/music)
+      - "bensound"        # Бесплатная (https://www.bensound.com)
+    preferred_source: "pixabay_music"  # Бесплатный вариант по умолчанию
+  
+  # ЗВУКОВЫЕ ЭФФЕКТЫ
+  sound_effects:
+    enabled: true
+    sources:
+      - "pixabay_sfx"   # Бесплатные SFX (https://pixabay.com/sound-effects)
+      - "epidemic_sound"  # Платная библиотека
+      - "freesound"     # Бесплатная (https://freesound.org)
+    preferred_source: "pixabay_sfx"
+    
+    # Эффекты для гороскопа
+    effects:
+      mystical_transition: "whoosh or magic sound"
+      zodiac_sign_appear: "chime or bell sound"
+      love_section: "heart beat or romantic tone"
+      money_section: "coin sound or success tone"
+      warning: "soft alert or shimmer"
+      lucky_element: "sparkle or positive chime"
+  
+  # FALLBACK LOGIC
+  fallback_if_gemini_quota_exceeded:
+    action: "switch_to_edge_tts"  # Переключиться на Edge-TTS если квота закончилась
+    log_alert: true                 # Отправить алерт в Telegram
+
+# ==============================================================================
+# VIDEO RENDERING
+# ==============================================================================
+
+video:
+  shorts:
+    style: "remotion"
+    template: "mystical_cards"
+    background_source: "stock_footage"
+    background_style: "celestial"  # Небо, звезды, таро
+    
+    overlay_text:
+      font: "Georgia"
+      size: 48
+      color: "#FFD700"  # Золотой
+      shadow: true
+      animation: "fade_in_out"
+    
+    # СТОКОВЫЕ ИСТОЧНИКИ ДЛЯ ВИДЕО
+    stock_sources:
+      - "pexels"      # https://www.pexels.com/videos (бесплатно)
+      - "pixabay"     # https://pixabay.com/videos (бесплатно)
+      - "unsplash"    # https://unsplash.com (бесплатно, фото + видео)
+    preferred_source: "pexels"
+    
+    search_keywords: "sky stars tarot cards zodiac mystical"
+    tools: ["ffmpeg", "imagemagick", "remotion"]
+  
+  long_form:
+    style: "moviepy"
+    template: "horoscope_reading"
+    background_source: "stock_footage + custom_overlays"
+    background_style: "professional_mystical"
+    
+    overlay_text:
+      font: "Georgia"
+      size: 56
+      color: "#FFD700"
+      shadow: true
+      animation: "slide_in"
+    
+    # ЭФФЕКТЫ ДЛЯ ДЛИННЫХ ВИДЕО
+    effects:
+      - "particle_effects"      # Плывущие частицы
+      - "zodiac_transitions"    # Переходы от знака к знаку
+      - "slow_zoom"             # Медленное приближение
+      - "fade_between_signs"    # Затухание между знаками
+    
+    stock_sources:
+      - "pexels"
+      - "pixabay"
+      - "unsplash"
+    preferred_source: "pixabay"
+    search_keywords: "celestial universe stars zodiac astrology mystical background"
+    
+    tools: ["ffmpeg", "moviepy", "imagemagick"]
+
+# ==============================================================================
+# SUBTITLES & ACCESSIBILITY
+# ==============================================================================
+
+subtitles:
+  enabled: true
+  engine: "whisperx"  # Точнее всего
+  language: "ru"
+  position: "bottom"
+  style: "white_bold_outline"
+  font_size: 32
+  auto_sync: true  # ffsubsync
+
+# ==============================================================================
+# UPLOAD SETTINGS
+# ==============================================================================
+
+upload:
+  platform: "youtube"
+  playlist_ids:
+    shorts: "PLXXXXX_SHORTS"  # Заполнить реальный ID
+    long_form: "PLXXXXX_LONG"  # Заполнить реальный ID
+  
+  tags:
+    - "гороскопы"
+    - "астрология"
+    - "знаки зодиака"
+    - "youtube shorts"
+    - "прогноз судьбы"
+    - "tarot"
+    - "мистика"
+  
+  monetization:
+    enabled: true
+    chapters: true      # На длинных видео
+    cards: true         # Ссылки на другие видео
+    end_screens: true   # Финальные экраны
+
+# ==============================================================================
+# CACHING & OPTIMIZATION
+# ==============================================================================
+
+caching:
+  enabled: true
+  result_cache: true
+  ttl: 86400  # 24 часа
+  script_cache_dir: ".cache/scripts/"
+  video_cache_dir: ".cache/videos/"
+
+# ==============================================================================
+# MONITORING & ANALYTICS
+# ==============================================================================
+
+monitoring:
+  telegram_notifications: true
+  send_stats_every: "24h"
+  track_metrics:
+    - "views"
+    - "engagement_rate"
+    - "avg_watch_duration"
+    - "click_through_rate"
+    - "subscribers_gained"
+  alert_on_gemini_quota_exceeded: true  # Алерт если квота Gemini TTS закончилась
+
+# ==============================================================================
+# CONTENT PLAN
+# ==============================================================================
+
+content_plan_file: "content_plan.json"
