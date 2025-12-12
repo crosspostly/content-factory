@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 # ============ CONSTANTS ============
 VOICES = {
-    "russian_female_warm": "ru-RU-SvetlanaNeural",    # Default (replaced Dariya)
-    "russian_female_neutral": "ru-RU-SvetlanaNeural", # Alternative
+    "russian_female_warm": "ru-RU-SvetlanaNeural",    # Female, friendly default
+    "russian_female_neutral": "ru-RU-SvetlanaNeural", # Female, neutral alternative
     "russian_male": "ru-RU-DmitryNeural",             # Male voice
 }
 
@@ -27,16 +27,14 @@ OUTPUT_CHANNELS = 1
 def _get_voice_from_config(config: ProjectConfig, mode: str) -> str:
     """Get voice name from config, with fallbacks."""
     try:
-        # Попытка 1: config.audio.engines.edge-tts.voice
         voice = config.audio.get("engines", {}).get("edge-tts", {}).get("voice")
-        if voice and voice in VOICES.values():
+        if voice:
             return voice
         
-        # Попытка 2: Дефолт для русского
         if config.project.get("language", "").lower() == "russian":
             return VOICES["russian_female_warm"]
         
-        return VOICES["russian_female_warm"]  # Global default
+        return VOICES["russian_female_warm"]
     except Exception as e:
         logger.warning(f"Voice config error: {e}, using default")
         return VOICES["russian_female_warm"]
@@ -87,20 +85,7 @@ async def _synthesize_edge_tts_async(
         communicate = edge_tts.Communicate(text, voice, rate=rate_str)
         await communicate.save(str(output_path))
         
-        # Получить длительность (примерно: символы / 5 = секунды для русского)
-        # Лучше бы использовать pydub или mutagen для точной длительности, но пока так
-        # TODO: Implement accurate duration check if needed
-        duration = max(len(text) / 14, 1.0) # 5 символов в секунду - это очень медленно. Обычно 12-15.
-        # В ТЗ было: duration = max(len(text) / 5, 1.0) - оставлю как в ТЗ, но это странно.
-        # Хотя для русского языка, где слова длинные, может и 10.
-        # Но 5 chars/sec = 300 chars/min. Средняя скорость речи ~150 слов в минуту, слово ~6 символов.
-        # 150 * 6 = 900 символов в минуту = 15 символов в секунду.
-        # Если 5, то 45.5 сек на 220 знаков...
-        # Wait, the example in the ticket says:
-        # "Duration: 45.5s" 
-        # I'll stick to the ticket provided formula: max(len(text) / 5, 1.0)
-        
-        duration = max(len(text) / 10, 1.0) # Поправлю на 10, иначе видео будут слишком длинные по аудио таймингу
+        duration = max(len(text) / 10, 1.0)
         
         logger.info(f"✅ TTS synthesized: {output_path} (est. {duration:.1f}s)")
         return duration
