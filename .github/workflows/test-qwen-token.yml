@@ -12,28 +12,27 @@ jobs:
       
       - name: Test Qwen Token
         env:
-          QWEN_REFRESH_TOKEN: ${{ secrets.QWEN_REFRESH_TOKEN }}
+          QWEN_ACCESS_TOKEN: ${{ secrets.QWEN_REFRESH_TOKEN }}
         run: |
           python3 << 'EOF'
           import requests
           import os
           
-          token = os.getenv('QWEN_REFRESH_TOKEN')
+          token = os.getenv('QWEN_ACCESS_TOKEN')
           print(f"Token received: {token[:10] if token else 'EMPTY'}...")
           
           if not token:
               print("ERROR: Token is empty!")
               exit(1)
           
-          print("Sending request to Qwen...")
-          response = requests.post(
-              "https://qwenlm.auth0.com/oauth/token",
-              json={
-                  "grant_type": "refresh_token",
-                  "client_id": "NqOqg6X7O1OjN1l2vUqaEflnYF0xkW6q",
-                  "client_secret": "",
-                  "refresh_token": token,
-                  "scope": "offline_access"
+          print("Testing Qwen API with Bearer token...")
+          
+          # Test with Qwen API - example: list models
+          response = requests.get(
+              "https://dashscope-intl.aliyuncs.com/api/v1/models",
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Content-Type": "application/json"
               }
           )
           
@@ -41,7 +40,7 @@ jobs:
           print(f"Response: {response.text[:500]}")
           
           if response.status_code == 200:
-              print("SUCCESS! Token works!")
+              print("✅ SUCCESS! Token works with Qwen API!")
           else:
-              print(f"FAILED with {response.status_code}")
+              print(f"❌ FAILED with {response.status_code}")
           EOF
