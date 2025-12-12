@@ -6,7 +6,7 @@ on:
       task:
         description: 'Task for Qwen Code'
         required: true
-        default: 'Analyze and summarize this repository'
+        default: 'Analyze and summarize this repository structure'
 
 jobs:
   qwen:
@@ -25,10 +25,13 @@ jobs:
 
       - name: Run Qwen Code Task
         env:
+          # Use OpenAI-compatible API mode for CI/CD environments
           OPENAI_API_KEY: ${{ secrets.QWEN_REFRESH_TOKEN }}
           OPENAI_BASE_URL: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
           OPENAI_MODEL: 'qwen3-coder-plus'
         run: |
-          # In non-interactive mode, Qwen Code automatically uses OpenAI-compatible API
-          echo "Running Qwen Code with DashScope API..."
-          echo "${{ github.event.inputs.task }}" | qwen --yolo
+          # Run Qwen Code in YOLO mode (non-interactive)
+          # The CLI automatically uses OpenAI-compatible API when these env vars are set
+          qwen --yolo << 'EOF'
+          ${{ github.event.inputs.task }}
+          EOF
