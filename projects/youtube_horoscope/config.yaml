@@ -1,0 +1,219 @@
+# 📅 YouTube Гороскопы - Configuration
+# Проект автоматического генерирования вирусного контента о гороскопах
+
+# ==============================================================================
+# PROJECT METADATA
+# ==============================================================================
+
+project:
+  name: "YouTube Гороскопы"
+  description: "Вирусные видео о гороскопах для YouTube Shorts и YouTube (YouTube)"
+  platform: "youtube"
+  priority: 1
+  niche: "astrology"
+  target_audience: "women 18-45, interested in astrology, horoscopes, zodiac signs"
+  language: "ru"
+  seo_keywords: 
+    - "гороскопы сегодня"
+    - "астрология"
+    - "прогноз дня"
+    - "signs of zodiac"
+    - "таро"
+
+# ==============================================================================
+# CONTENT STRATEGY
+# ==============================================================================
+
+content_strategy:
+  # Короткие видео (YouTube Shorts + Вертикальные)
+  shorts:
+    schedule: "2x daily"
+    upload_times: ["10:00", "18:00"]  # UTC+3
+    duration: "15-60 seconds"
+    resolution: "1080x1920"
+    fps: 30
+    count_per_week: 14  # 2x7
+    
+    # 3 видео из 14 - подъём к длинному видео
+    promotion_count: 3
+    promotion_type: "teaser_to_long_form"
+    
+  # Длинные видео (YouTube)
+  long_form:
+    schedule: "1x weekly"
+    upload_day: "Monday"
+    upload_time: "19:00"  # UTC+3
+    duration: "8-15 minutes"
+    resolution: "1920x1080"
+    fps: 30
+    count_per_week: 1
+    
+  # Контент с рекламой
+  ads:
+    enabled: true
+    folder: "ads/"
+    strategy: "sponsored_content_blend"
+    # Реклама не более 1 раза на 7 видео
+    frequency: 1  # per 7 shorts
+
+# ==============================================================================
+# AI GENERATION SETTINGS
+# ==============================================================================
+
+generation:
+  model: "gemma3:4b"  # Можно использовать Gemini 2.5 Flash
+  temperature: 0.8  # Больше креативности
+  max_retries: 3
+  
+  # Файлы с промптами
+  prompt_files:
+    shorts_script: "prompts/shorts_scenario.txt"
+    shorts_hooks: "prompts/shorts_hooks.txt"
+    shorts_visual_hints: "prompts/shorts_visual_hints.txt"
+    
+    long_form_script: "prompts/long_form_scenario.txt"
+    long_form_structure: "prompts/long_form_structure.txt"
+    
+    ad_script: "prompts/ad_script.txt"
+    ad_visual_hints: "prompts/ad_visual_hints.txt"
+
+# ==============================================================================
+# AUDIO SETTINGS
+# ==============================================================================
+
+audio:
+  engine: "edge-tts"  # естественная речь
+  voice: "ru-RU-DariyaNeural"  # Женский голос
+  speed: 1.1  # Немного быстрее для затягиваэщего эффекта
+  background_music:
+    enabled: true
+    volume: 0.3  # 30% музыки, 70% голоса
+    style: "mysterious_ambient"  # таинственная амбиентная музыка
+    library: "epidemic_sound"  # Либо реальная библиотека
+
+# ==============================================================================
+# VIDEO RENDERING
+# ==============================================================================
+
+video:
+  # Шортс
+  shorts:
+    style: "remotion"  # React-видео для быстого рендера
+    template: "mystical_cards"  # Шаблон с ностальгичным дизайном
+    background_source: "stock_footage"  # Pexels/Pixabay
+    background_style: "celestial"  # небо, звёзды, таро
+    
+    # Параметры
+    overlay_text:
+      font: "Georgia"
+      size: 48
+      color: "#FFD700"  # Голдовой
+      shadow: true
+      animation: "fade_in_out"
+    
+    # Тоолы
+    tools: ["ffmpeg", "imagemagick"]
+  
+  # Длинные видео
+  long_form:
+    style: "moviepy"  # Гибкость + скорость
+    template: "horoscope_reading"  # Профессиональный гороскопный
+    background_source: "stock_footage + custom_overlays"
+    background_style: "professional_mystical"
+    
+    # Параметры
+    overlay_text:
+      font: "Georgia"
+      size: 56
+      color: "#FFD700"
+      shadow: true
+      animation: "slide_in"
+    
+    effects:
+      - "particle_effects"  # Плывующие частицы
+      - "zodiac_transitions"  # Переходы от знака к знаку
+      - "slow_zoom"  # Медленное приближение
+    
+    tools: ["ffmpeg", "moviepy", "imagemagick"]
+
+# ==============================================================================
+# SUBTITLES & ACCESSIBILITY
+# ==============================================================================
+
+subtitles:
+  enabled: true
+  engine: "whisperx"  # Наиболее точные
+  language: "ru"
+  position: "bottom"  # Экран для шортс
+  style: "white_bold_outline"
+  font_size: 32
+  auto_sync: true  # ffsubsync
+
+# ==============================================================================
+# UPLOAD SETTINGS
+# ==============================================================================
+
+upload:
+  platform: "youtube"
+  playlist_ids:
+    shorts: "PLXXXXX_SHORTS"  # YouTube Shorts плейлист
+    long_form: "PLXXXXX_LONG"  # Обычные видео
+  
+  tags:
+    - "гороскопы"
+    - "астрология"
+    - "знаки зодиака"
+    - "youtube shorts"
+    - "прогноз судьбы"
+    - "tarot"
+    - "мистика"
+  
+  monetization:
+    enabled: true
+    chapters: true  # На длинных видео
+    cards: true
+    end_screens: true
+
+# ==============================================================================
+# CACHING & OPTIMIZATION
+# ==============================================================================
+
+caching:
+  enabled: true
+  result_cache: true  # Кэширование генерированных сценариев
+  ttl: 86400  # 24 часа
+  script_cache_dir: ".cache/scripts/"
+  video_cache_dir: ".cache/videos/"
+
+# ==============================================================================
+# MONITORING & ANALYTICS
+# ==============================================================================
+
+monitoring:
+  telegram_notifications: true
+  send_stats_every: "24h"
+  track_metrics:
+    - "views"
+    - "engagement_rate"
+    - "avg_watch_duration"
+    - "click_through_rate"
+    - "subscribers_gained"
+
+# ==============================================================================
+# CONTENT PLAN
+# ==============================================================================
+
+content_plan_file: "content_plan.json"
+
+# Пример структуры content_plan.json:
+# {
+#   "week_1": {
+#     "long_form": "Prognosis for Aries for the week",
+#     "shorts": [
+#       "Quick daily horoscope for Aries",
+#       "Love forecast for all signs",
+#       "Teaser: Full Aries forecast in long video",
+#       ...
+#     ]
+#   }
+# }
