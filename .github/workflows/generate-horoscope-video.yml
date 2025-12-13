@@ -278,6 +278,7 @@ jobs:
               from core.generators import video_renderer
               
               video_path = video_renderer.render(
+                  config=config,
                   script=script,
                   audio_map=audio_map,
                   mode=fmt
