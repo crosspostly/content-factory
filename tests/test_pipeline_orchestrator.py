@@ -139,18 +139,29 @@ class TestPlatformExtraction:
 class TestPipelineExecution:
     """Test pipeline execution."""
     
+    @patch.dict('os.environ', {'GOOGLE_AI_API_KEY': 'test_api_key'})
     @patch('core.orchestrators.pipeline_orchestrator.config_loader.load')
     @patch('core.generators.script_generator.generate_short')
     @patch('core.generators.tts_generator.synthesize')
     @patch('core.generators.video_renderer.render')
-    def test_main_shorts_success(self, mock_render, mock_tts, mock_script, mock_load):
+    @patch('core.utils.model_router.get_router')
+    def test_main_shorts_success(self, mock_router, mock_render, mock_tts, mock_script, mock_load):
         """Test successful shorts pipeline execution."""
         # Setup mocks
         mock_config = MagicMock()
         mock_config.monitoring.telegram_notifications = False
         mock_load.return_value = mock_config
         
-        mock_script.return_value = {"id": "test_123", "hook": "Test"}
+        # Mock ModelRouter
+        mock_router.return_value.get_stats.return_value = {
+            "total_attempts": 1,
+            "successful": 1,
+            "failed": 0,
+            "success_rate": "100%",
+            "model_usage": {"gemini-2.0-flash-exp": 1}
+        }
+        
+        mock_script.return_value = {"id": "test_123", "hook": "Test", "_script_path": "/tmp/script.json", "script": "Test script"}
         mock_tts.return_value = {
             "blocks": {"main": "/tmp/audio.wav"},
             "total_duration_sec": 15.0
@@ -176,20 +187,33 @@ class TestPipelineExecution:
         mock_tts.assert_called_once()
         mock_render.assert_called_once()
     
+    @patch.dict('os.environ', {'GOOGLE_AI_API_KEY': 'test_api_key'})
     @patch('core.orchestrators.pipeline_orchestrator.config_loader.load')
     @patch('core.generators.script_generator.generate_long_form')
     @patch('core.generators.tts_generator.synthesize')
     @patch('core.generators.video_renderer.render')
-    def test_main_long_form_success(self, mock_render, mock_tts, mock_script, mock_load):
+    @patch('core.utils.model_router.get_router')
+    def test_main_long_form_success(self, mock_router, mock_render, mock_tts, mock_script, mock_load):
         """Test successful long-form pipeline execution."""
         # Setup mocks
         mock_config = MagicMock()
         mock_config.monitoring.telegram_notifications = False
         mock_load.return_value = mock_config
         
+        # Mock ModelRouter
+        mock_router.return_value.get_stats.return_value = {
+            "total_attempts": 1,
+            "successful": 1,
+            "failed": 0,
+            "success_rate": "100%",
+            "model_usage": {"gemini-2.0-flash-exp": 1}
+        }
+        
         mock_script.return_value = {
             "id": "test_123",
-            "blocks": {"love": "...", "money": "...", "health": "..."}
+            "blocks": {"love": "...", "money": "...", "health": "..."},
+            "_script_path": "/tmp/script.json",
+            "script": "Test script"
         }
         mock_tts.return_value = {
             "blocks": {

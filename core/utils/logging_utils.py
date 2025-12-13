@@ -62,6 +62,11 @@ def log_success(message: str) -> None:
     logging.getLogger("content_factory").info(message)
 
 
+def log_info(message: str) -> None:
+    """Log an info message."""
+    logging.getLogger("content_factory").info(message)
+
+
 def send_telegram_alert(config: Any, message: str) -> None:
     """Send a Telegram message if bot credentials are present.
 
