@@ -1,0 +1,31 @@
+name: TODO to Issue
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - feature-*
+
+jobs:
+  todo-to-issue:
+    runs-on: ubuntu-latest
+    name: Convert TODOs to GitHub Issues
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TODO to Issue
+        uses: alstr/todo-to-issue-action@v5
+        with:
+          REPO: ${{ github.repository }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          INSERT_ISSUE_URLS: 'true'
+          CLOSE_ISSUES: 'true'
+          LABEL: 'todo'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
