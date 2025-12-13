@@ -4,16 +4,18 @@
 
 generation:
   # Primary and fallback models (auto-selected by model_router)
-  primary_model: qwen2.5-coder:1.5b
+  # UPDATED: Using gemini-2.5-flash which actually exists
+  primary_model: gemini-2.5-flash
   fallback_models:
-    - gemini-2.5-flash
+    - gemini-1.5-flash
+    - gemini-1.5-pro
   
   # Generation parameters
   temperature: 0.8
   max_retries: 3
   retry_delay_sec: 2
 
-debugger:
+debugging:
   # Auto-fix agent settings (shared for all projects)
   enabled: true
   trigger_on_failure: true
@@ -21,9 +23,9 @@ debugger:
   create_pr_if_possible: true
   max_log_lines: 3000
   
-  # Ollama settings for Qwen
+  # Ollama settings for debugging
   ollama:
-    enabled: true
+    enabled: false
     model: qwen2.5-coder:1.5b
     cache_path: ~/.ollama
     timeout_sec: 300
@@ -70,9 +72,6 @@ monitoring:
 
 ci_cd:
   # Common CI/CD settings
-  auto_fix_agent:
-    enabled: true
-    model: qwen2.5-coder:1.5b
   tests:
     enabled: true
     fail_on_error: true
