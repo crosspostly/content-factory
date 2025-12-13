@@ -170,14 +170,19 @@ class ProjectConfig(ConfigNode):
                 raise ModuleNotFoundError(
                     "PyYAML is required to load .yaml configs. Install with: pip install pyyaml"
                 )
-            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if raw is None:
+                raise ValueError(f"Config file is empty: {path}")
+            if not isinstance(raw, dict):
+                raise ValueError("Config root must be a mapping")
         elif path.suffix.lower() == ".json":
             raw = json.loads(path.read_text(encoding="utf-8"))
+            if not raw:
+                raise ValueError(f"Config file is empty: {path}")
+            if not isinstance(raw, dict):
+                raise ValueError("Config root must be a mapping")
         else:
             raise ValueError(f"Unsupported config format: {path.suffix}")
-
-        if not isinstance(raw, dict):
-            raise ValueError("Config root must be a mapping")
 
         # Merge shared config if present
         shared_path = _repo_root() / "config" / "shared.yaml"
@@ -206,7 +211,14 @@ class ProjectConfig(ConfigNode):
             raw["project"].setdefault("id", project_folder)
             raw["project"].setdefault("name", project_folder)
 
-        return cls(raw)
+        config = cls(raw)
+
+        # Validate required fields
+        project_section = config.get("project", {})
+        if not project_section or not project_section.get("name"):
+            raise ValueError(f"Project name is required in {path}")
+
+        return config
 
 
 def load(project_name: str) -> ProjectConfig:
