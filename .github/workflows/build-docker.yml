@@ -1,10 +1,11 @@
 name: 🐳 Build and Push Docker Image
 
+# Only run explicitly (don't auto-trigger from push)
 on:
+  workflow_dispatch:
   push:
     branches: [main]
-    paths: ['Dockerfile', 'requirements.txt', '.github/workflows/build-docker.yml']
-  workflow_dispatch:
+    paths: ['Dockerfile']
 
 jobs:
   build:
