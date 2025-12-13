@@ -14,14 +14,11 @@ mock_google.genai = MagicMock()
 sys.modules['google'] = mock_google
 sys.modules['google.genai'] = mock_google.genai
 
-# Mock core.utils.model_router
 sys.modules['core.utils.model_router'] = MagicMock()
-core_utils = MagicMock()
-core_utils.model_router = sys.modules['core.utils.model_router']
-sys.modules['core.utils'] = core_utils
 
-import pytest
-
+# Import real core.utils package and add model_router attribute
+import core.utils
+core.utils.model_router = sys.modules['core.utils.model_router']
 
 @pytest.fixture(scope="session")
 def test_output_dir():
