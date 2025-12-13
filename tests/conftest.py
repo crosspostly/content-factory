@@ -10,7 +10,6 @@ sys.modules['google'] = mock_google
 sys.modules['google.genai'] = mock_google.genai
 import tempfile
 sys.modules['core.utils.model_router'] = MagicMock()
-sys.modules['core.utils'] = MagicMock()
 from pathlib import Path
 from typing import Any
 
