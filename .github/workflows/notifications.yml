@@ -1,0 +1,74 @@
+name: Notifications & Alerts
+
+on:
+  workflow_run:
+    workflows:
+      - "Run Tests"
+      - "AI Code Review with Gemini 2.5"
+      - "Code Quality & Linting"
+      - "Build Docker"
+    types:
+      - completed
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    name: Send Notifications
+    if: always()
+    
+    steps:
+      - name: Determine Status
+        id: status
+        run: |
+          if [ "${{ github.event.workflow_run.conclusion }}" = "success" ]; then
+            echo "status=✅ SUCCESS" >> $GITHUB_OUTPUT
+            echo "emoji=🎉" >> $GITHUB_OUTPUT
+            echo "color=2ecc71" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.workflow_run.conclusion }}" = "failure" ]; then
+            echo "status=❌ FAILED" >> $GITHUB_OUTPUT
+            echo "emoji=🔴" >> $GITHUB_OUTPUT
+            echo "color=e74c3c" >> $GITHUB_OUTPUT
+          else
+            echo "status=⚠️ CANCELLED" >> $GITHUB_OUTPUT
+            echo "emoji=⚠️" >> $GITHUB_OUTPUT
+            echo "color=f39c12" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send Telegram Notification
+        uses: appleboy/telegram-action@master
+        if: env.TELEGRAM_BOT_TOKEN != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            ${{ steps.status.outputs.emoji }} Workflow: ${{ github.event.workflow_run.name }}
+            Status: ${{ steps.status.outputs.status }}
+            
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.event.workflow_run.head_branch }}
+            Commit: ${{ github.event.workflow_run.head_commit.message }}
+            Author: ${{ github.event.workflow_run.actor }}
+            
+            🔗 Details: https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}
+        continue-on-error: true
+
+      - name: Send Telegram on Test Failure
+        uses: appleboy/telegram-action@master
+        if: github.event.workflow_run.name == 'Run Tests' && github.event.workflow_run.conclusion == 'failure' && env.TELEGRAM_BOT_TOKEN != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            🔴 TESTS FAILED!
+            
+            You need to fix these issues:
+            - Check test logs in Actions tab
+            - Run locally: pytest tests/ -v
+            - Push fixes to fix the workflow
+            
+            🔗 Action logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}
+        continue-on-error: true
