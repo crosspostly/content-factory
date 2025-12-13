@@ -253,8 +253,16 @@ jobs:
     
     steps:
       - name: Send Telegram notification
-        if: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
+          TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+          TELEGRAM_CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+          
+          # Only send if both tokens are set
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "⚠️ Telegram secrets not configured, skipping notification"
+            exit 0
+          fi
+          
           FORMAT="${{ github.event.inputs.format || 'shorts' }}"
           STATUS="${{ needs.generate-video.result }}"
           
@@ -270,6 +278,6 @@ jobs:
           
           curl -s -X POST \
             -H 'Content-Type: application/x-www-form-urlencoded' \
-            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}&text=$MESSAGE&parse_mode=HTML" \
-            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" > /dev/null || true
+            -d "chat_id=$TELEGRAM_CHAT_ID&text=$MESSAGE&parse_mode=HTML" \
+            "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" > /dev/null || true
         continue-on-error: true
