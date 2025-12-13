@@ -1,11 +1,11 @@
 name: Generate Horoscope Video
 
+# Запуск: вручную через Actions или по расписанию
 on:
-  # Ручной запуск с параметрами
   workflow_dispatch:
     inputs:
       format:
-        description: 'Video format'
+        description: 'Video format (shorts | long-form | ad)'
         required: true
         default: 'shorts'
         type: choice
@@ -14,7 +14,7 @@ on:
           - long-form
           - ad
       date:
-        description: 'Horoscope date (YYYY-MM-DD, optional)'
+        description: 'Horoscope date (YYYY-MM-DD, optional - uses today)'
         required: false
         type: string
       project:
@@ -22,28 +22,15 @@ on:
         required: false
         default: 'youtube_horoscope'
         type: string
-      publish:
-        description: 'Publish after generation'
-        required: false
-        default: false
-        type: boolean
   
-  # По расписанию: каждый день в 06:00 UTC (09:00 MSK)
+  # По расписанию: каждый день в 06:00 UTC (09:00 MSK) для shorts
   schedule:
     - cron: '0 6 * * *'
 
 jobs:
   generate-video:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
-    
-    env:
-      GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
-      PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-      PROJECT: ${{ github.event.inputs.project || 'youtube_horoscope' }}
-      FORMAT: ${{ github.event.inputs.format || 'shorts' }}
-      HOROSCOPE_DATE: ${{ github.event.inputs.date }}
-      PUBLISH: ${{ github.event.inputs.publish || false }}
+    timeout-minutes: 45
     
     steps:
       - name: Checkout code
@@ -67,377 +54,316 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg imagemagick ghostscript fonts-dejavu-core libsm6 libxext6
-          echo "✅ FFmpeg version:"
-          ffmpeg -version | head -1
-          echo "✅ Python version:"
-          python --version
+          echo "✅ FFmpeg: $(ffmpeg -version | head -1)"
+          echo "✅ Python: $(python --version)"
       
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt -q
       
-      - name: Validate project config
+      - name: Determine format and date
+        id: params
+        env:
+          INPUT_FORMAT: ${{ github.event.inputs.format }}
+          INPUT_DATE: ${{ github.event.inputs.date }}
+          INPUT_PROJECT: ${{ github.event.inputs.project }}
         run: |
-          python3 << 'PYTHON'
-          import json
+          python3 << 'EOF'
+          import os
+          from datetime import date
+          
+          # Параметры
+          fmt = os.getenv('INPUT_FORMAT') or 'shorts'
+          dt = os.getenv('INPUT_DATE') or date.today().isoformat()
+          proj = os.getenv('INPUT_PROJECT') or 'youtube_horoscope'
+          
+          print(f"Format: {fmt}")
+          print(f"Date: {dt}")
+          print(f"Project: {proj}")
+          
+          # Запись для следующих шагов
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"format={fmt}\n")
+              f.write(f"date={dt}\n")
+              f.write(f"project={proj}\n")
+          EOF
+      
+      - name: Generate Content (Part 1 → Part 2 → Part 3)
+        id: generate
+        env:
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          FORMAT: ${{ steps.params.outputs.format }}
+          DATE: ${{ steps.params.outputs.date }}
+          PROJECT: ${{ steps.params.outputs.project }}
+        run: |
+          python3 << 'PYTHON_SCRIPT'
+          import os
+          import sys
           from pathlib import Path
-          from core.utils.config_loader import load_project_config
           
-          project = "${{ env.PROJECT }}"
-          print(f"\n📋 Validating project: {project}")
+          # Параметры
+          project = os.getenv('PROJECT')
+          fmt = os.getenv('FORMAT')
+          target_date = os.getenv('DATE')
           
+          print(f"\n" + "="*70)
+          print(f"🎬 HOROSCOPE VIDEO GENERATION PIPELINE")
+          print(f"="*70)
+          print(f"Project: {project}")
+          print(f"Format: {fmt}")
+          print(f"Date: {target_date}")
+          print(f"\n")
+          
+          # Загрузить конфиг
           try:
-              config = load_project_config(project)
-              print(f"✅ Project config loaded successfully")
-              print(f"   - Name: {config.project.name}")
-              print(f"   - Language: {config.project.language}")
-              print(f"   - Niche: {config.project.niche}")
+              from core.utils.config_loader import load
+              config = load(project)
+              print(f"✅ Config loaded: {project}")
           except Exception as e:
               print(f"❌ Failed to load config: {e}")
-              exit(1)
-          PYTHON
+              sys.exit(1)
+          
+          # ========== PART 1: SCRIPT GENERATION ==========
+          print(f"\n📝 PART 1: Script Generation")
+          print(f"-" * 70)
+          
+          try:
+              from core.generators import script_generator
+              
+              if fmt == "shorts":
+                  script = script_generator.generate_short(config, target_date=target_date)
+              elif fmt == "long_form":
+                  script = script_generator.generate_long_form(config, target_date=target_date)
+              elif fmt == "ad":
+                  script = script_generator.generate_ad(config, product_id="horoscope_ad", target_date=target_date)
+              else:
+                  raise ValueError(f"Unknown format: {fmt}")
+              
+              script_path = script.get('_script_path')
+              print(f"✅ Script generated: {script_path}")
+              print(f"   Format: {fmt}")
+              print(f"   Date: {target_date}")
+              
+          except Exception as e:
+              import traceback
+              print(f"❌ Script generation failed:")
+              print(traceback.format_exc())
+              sys.exit(1)
+          
+          # ========== PART 2: TTS SYNTHESIS ==========
+          print(f"\n🎙️ PART 2: TTS Synthesis (Gemini)")
+          print(f"-" * 70)
+          
+          try:
+              from core.generators import tts_generator
+              
+              api_key = os.getenv('GOOGLE_AI_API_KEY')
+              if not api_key:
+                  raise ValueError("GOOGLE_AI_API_KEY not set!")
+              
+              audio_map = tts_generator.synthesize(
+                  config=config,
+                  script=script,
+                  mode=fmt,
+                  api_key=api_key
+              )
+              
+              print(f"✅ Audio synthesized")
+              print(f"   Engine: {audio_map.get('engine_used')}")
+              print(f"   Duration: {audio_map.get('total_duration_sec'):.1f}s")
+              print(f"   Sample rate: {audio_map.get('sample_rate')} Hz")
+              print(f"   Blocks: {list(audio_map.get('blocks', {}).keys())}")
+              
+              for block_name, block_path in audio_map.get('blocks', {}).items():
+                  if Path(block_path).exists():
+                      size_mb = Path(block_path).stat().st_size / (1024*1024)
+                      print(f"     - {block_name}: {block_path} ({size_mb:.1f}MB)")
+          
+          except Exception as e:
+              import traceback
+              print(f"❌ TTS synthesis failed:")
+              print(traceback.format_exc())
+              sys.exit(1)
+          
+          # ========== PART 3: VIDEO RENDERING ==========
+          print(f"\n🎥 PART 3: Video Rendering")
+          print(f"-" * 70)
+          
+          try:
+              from core.generators import video_renderer
+              
+              video_path = video_renderer.render(
+                  config=config,
+                  script=script,
+                  audio_map=audio_map,
+                  mode=fmt
+              )
+              
+              # Информация о видео
+              video_file = Path(video_path)
+              if video_file.exists():
+                  size_mb = video_file.stat().st_size / (1024*1024)
+                  print(f"✅ Video rendered: {video_path}")
+                  print(f"   Size: {size_mb:.1f} MB")
+              else:
+                  raise FileNotFoundError(f"Video file not found: {video_path}")
+          
+          except Exception as e:
+              import traceback
+              print(f"❌ Video rendering failed:")
+              print(traceback.format_exc())
+              sys.exit(1)
+          
+          # ========== SUMMARY ==========
+          print(f"\n" + "="*70)
+          print(f"✅ SUCCESS! Video generation complete")
+          print(f"="*70)
+          print(f"Project: {project}")
+          print(f"Format: {fmt}")
+          print(f"Output: {video_path}")
+          print(f"Size: {size_mb:.1f} MB")
+          print(f"\nVideo is ready for:")
+          if fmt == "shorts":
+              print(f"  - YouTube Shorts (1080×1920)")
+              print(f"  - TikTok / Instagram Reels")
+          elif fmt == "long_form":
+              print(f"  - YouTube (1920×1080, horizontal)")
+          elif fmt == "ad":
+              print(f"  - Ad campaigns (1080×1920)")
+          print(f"\nNext: Download from artifacts and publish to platforms")
+          print(f"")
+          
+          PYTHON_SCRIPT
       
-      - name: Generate Script (Part 1)
-        id: script_generation
+      - name: Generate metadata
+        if: success()
         env:
-          HOROSCOPE_DATE: ${{ env.HOROSCOPE_DATE }}
+          PROJECT: ${{ steps.params.outputs.project }}
+          FORMAT: ${{ steps.params.outputs.format }}
+          DATE: ${{ steps.params.outputs.date }}
         run: |
-          python3 << 'PYTHON'
+          python3 << 'PYTHON_META'
           import json
-          import sys
+          import os
           from datetime import datetime
           from pathlib import Path
-          from core.generators.script_generator import ScriptGenerator
-          from core.utils.config_loader import load_project_config
           
-          project = "${{ env.PROJECT }}"
-          format = "${{ env.FORMAT }}"
-          date_input = "${{ env.HOROSCOPE_DATE }}"
+          project = os.getenv('PROJECT')
+          fmt = os.getenv('FORMAT')
+          target_date = os.getenv('DATE')
           
-          print(f"\n🎬 Part 1: Script Generation")
-          print(f"   Project: {project}")
-          print(f"   Format: {format}")
+          output_dir = Path(f"output/videos/{project}")
+          video_files = sorted(list(output_dir.glob(f"{fmt}.mp4"))) if output_dir.exists() else []
           
-          try:
-              config = load_project_config(project)
-              generator = ScriptGenerator(config)
-              
-              # Определить дату
-              if date_input:
-                  try:
-                      horoscope_date = datetime.strptime(date_input, '%Y-%m-%d').date()
-                  except ValueError:
-                      print(f"❌ Invalid date format: {date_input}. Using today.")
-                      horoscope_date = datetime.now().date()
-              else:
-                  horoscope_date = datetime.now().date()
-              
-              print(f"   Date: {horoscope_date}")
-              
-              # Получить промпт
-              prompt_file = config.generation.prompt_files[f"{format}_script"]
-              print(f"   Prompt: {prompt_file}")
-              
-              # Генерировать сценарий
-              script_result = generator.generate_script(
-                  format=format,
-                  horoscope_date=str(horoscope_date),
-                  model="gemini"  # или "qwen" для fallback
-              )
-              
-              script_path = script_result['script_path']
-              print(f"✅ Script generated: {script_path}")
-              
-              # Сохранить в output для следующих шагов
-              output_dir = Path(f"output/scripts/{project}")
-              output_dir.mkdir(parents=True, exist_ok=True)
-              
-              # GitHub Actions output
-              with open(Path(script_path)) as f:
-                  script_data = json.load(f)
-              
-              print(f"\n📊 Script details:")
-              print(f"   ID: {script_data.get('id')}")
-              print(f"   Duration: {script_data.get('total_duration_sec', 0)}s")
-              print(f"   Blocks: {len(script_data.get('blocks', []))}")
-              
-              # Вывод для следующего шага
-              with open(Path.cwd() / f".script_path_{format}", 'w') as f:
-                  f.write(str(script_path))
-              
-              sys.exit(0)
+          if not video_files:
+              print(f"ℹ️ No video files to generate metadata for")
+              exit(0)
           
-          except Exception as e:
-              import traceback
-              print(f"\n❌ Script generation failed:")
-              print(traceback.format_exc())
-              sys.exit(1)
-          PYTHON
-      
-      - name: Synthesize Audio (Part 2)
-        id: audio_generation
-        run: |
-          python3 << 'PYTHON'
-          import json
-          import sys
-          from pathlib import Path
-          from core.generators.tts_generator import TTSGenerator
-          from core.utils.config_loader import load_project_config
+          video_path = video_files[-1]
           
-          project = "${{ env.PROJECT }}"
-          format = "${{ env.FORMAT }}"
+          # Создать метаданные для платформ
+          metadata = {
+              "title": f"Гороскоп на {target_date}",
+              "description": f"Ваш личный гороскоп на {target_date}\n\nПодпишитесь на канал для новых гороскопов!",
+              "tags": ["гороскоп", "астрология", "зодиак", "астро"],
+              "category": "Entertainment",
+              "visibility": "public",
+              "format": fmt,
+              "date_generated": datetime.now().isoformat(),
+              "video_path": str(video_path),
+          }
           
-          print(f"\n🎙️  Part 2: Audio Synthesis (TTS)")
-          print(f"   Format: {format}")
+          # Формат-специфичные параметры
+          if fmt == "shorts":
+              metadata["platform"] = ["YouTube Shorts", "TikTok", "Instagram Reels"]
+              metadata["recommended_tags"] = ["horoscope", "astrology", "zodiac", "viral"]
+          elif fmt == "long_form":
+              metadata["platform"] = ["YouTube"]
+              metadata["chapters"] = [
+                  {"title": "Любовь", "timestamp": "0:10"},
+                  {"title": "Деньги", "timestamp": "4:00"},
+                  {"title": "Здоровье", "timestamp": "8:00"},
+              ]
+          elif fmt == "ad":
+              metadata["platform"] = ["YouTube", "TikTok", "Instagram"]
+              metadata["ad_duration_sec"] = 15
           
-          try:
-              config = load_project_config(project)
-              tts = TTSGenerator(config)
-              
-              # Получить путь к сценарию
-              script_path_file = Path.cwd() / f".script_path_{format}"
-              if not script_path_file.exists():
-                  print(f"❌ Script path file not found: {script_path_file}")
-                  sys.exit(1)
-              
-              script_path = Path(script_path_file.read_text().strip())
-              print(f"   Script: {script_path}")
-              
-              # Загрузить сценарий
-              with open(script_path) as f:
-                  script_data = json.load(f)
-              
-              # Генерировать аудио для блоков
-              audio_result = tts.synthesize_blocks(
-                  blocks=script_data.get('blocks', []),
-                  output_dir=f"output/audio/{project}",
-                  format=format
-              )
-              
-              audio_path = audio_result['merged_audio_path']
-              print(f"✅ Audio synthesized: {audio_path}")
-              print(f"   Duration: {audio_result.get('total_duration_sec', 0)}s")
-              print(f"   Sample rate: {audio_result.get('sample_rate', 22050)} Hz")
-              
-              # Сохранить путь для видео генерации
-              with open(Path.cwd() / f".audio_path_{format}", 'w') as f:
-                  f.write(str(audio_path))
-              
-              sys.exit(0)
+          metadata_path = output_dir / f"metadata_{fmt}.json"
+          with open(metadata_path, 'w') as f:
+              json.dump(metadata, f, indent=2, ensure_ascii=False)
           
-          except Exception as e:
-              import traceback
-              print(f"\n❌ Audio synthesis failed:")
-              print(traceback.format_exc())
-              sys.exit(1)
-          PYTHON
-      
-      - name: Render Video (Part 3)
-        id: video_rendering
-        run: |
-          python3 << 'PYTHON'
-          import json
-          import sys
-          from pathlib import Path
-          from core.generators.video_renderer import VideoRenderer
-          from core.utils.config_loader import load_project_config
-          
-          project = "${{ env.PROJECT }}"
-          format = "${{ env.FORMAT }}"
-          
-          print(f"\n🎥 Part 3: Video Rendering")
-          print(f"   Format: {format}")
-          
-          try:
-              config = load_project_config(project)
-              renderer = VideoRenderer(config)
-              
-              # Получить пути к сценарию и аудио
-              script_path_file = Path.cwd() / f".script_path_{format}"
-              audio_path_file = Path.cwd() / f".audio_path_{format}"
-              
-              if not script_path_file.exists() or not audio_path_file.exists():
-                  print(f"❌ Missing script or audio path files")
-                  sys.exit(1)
-              
-              script_path = Path(script_path_file.read_text().strip())
-              audio_path = Path(audio_path_file.read_text().strip())
-              
-              print(f"   Script: {script_path}")
-              print(f"   Audio: {audio_path}")
-              
-              # Загрузить сценарий
-              with open(script_path) as f:
-                  script_data = json.load(f)
-              
-              # Выбрать метод рендеринга
-              output_dir = Path(f"output/videos/{project}")
-              output_dir.mkdir(parents=True, exist_ok=True)
-              
-              output_file = output_dir / f"{format}_{script_data.get('id', 'video')}.mp4"
-              
-              # Рендерить видео
-              if format == "shorts":
-                  render_method = renderer.render_shorts
-              elif format == "long-form":
-                  render_method = renderer.render_long_form
-              elif format == "ad":
-                  render_method = renderer.render_ad
-              else:
-                  print(f"❌ Unknown format: {format}")
-                  sys.exit(1)
-              
-              print(f"\n⏳ Rendering {format} video...")
-              video_result = render_method(
-                  audio_path=str(audio_path),
-                  script_data=script_data,
-                  output_path=str(output_file)
-              )
-              
-              video_path = video_result['video_path']
-              print(f"\n✅ Video rendered: {video_path}")
-              print(f"   Resolution: {video_result.get('resolution')}")
-              print(f"   Duration: {video_result.get('duration_sec')}s")
-              print(f"   File size: {video_result.get('file_size_mb', 0):.1f} MB")
-              print(f"   FPS: {video_result.get('fps')}")
-              print(f"   Codec: {video_result.get('codec')}")
-              
-              # Сохранить информацию для публикации
-              metadata = {
-                  "video_path": str(video_path),
-                  "format": format,
-                  "project": project,
-                  "script_data": script_data,
-                  "video_result": video_result
-              }
-              
-              metadata_file = output_dir / f".metadata_{script_data.get('id')}.json"
-              with open(metadata_file, 'w') as f:
-                  json.dump(metadata, f, indent=2, ensure_ascii=False)
-              
-              sys.exit(0)
-          
-          except Exception as e:
-              import traceback
-              print(f"\n❌ Video rendering failed:")
-              print(traceback.format_exc())
-              sys.exit(1)
-          PYTHON
-      
-      - name: Generate Metadata
-        id: metadata
-        run: |
-          python3 << 'PYTHON'
-          import json
-          from pathlib import Path
-          from core.utils.config_loader import load_project_config
-          
-          project = "${{ env.PROJECT }}"
-          format = "${{ env.FORMAT }}"
-          
-          print(f"\n📝 Generating metadata")
-          
-          try:
-              config = load_project_config(project)
-              output_dir = Path(f"output/videos/{project}")
-              
-              # Найти видео файл
-              video_files = list(output_dir.glob(f"{format}_*.mp4"))
-              if not video_files:
-                  print(f"⚠️  No video files found")
-                  sys.exit(0)
-              
-              video_path = video_files[-1]  # Самый новый
-              
-              # Создать метаданные для YouTube
-              metadata = {
-                  "title": f"Гороскоп на {datetime.now().strftime('%d.%m.%Y')}",
-                  "description": f"Ваш персональный гороскоп на {datetime.now().strftime('%d.%m.%Y')}\n\nПодпишитесь на канал для новых гороскопов каждый день!",
-                  "tags": ["гороскоп", "астрология", "зодиак"],
-                  "category": "Entertainment",
-                  "visibility": "public"
-              }
-              
-              metadata_file = output_dir / f"metadata_{format}.json"
-              with open(metadata_file, 'w') as f:
-                  json.dump(metadata, f, indent=2, ensure_ascii=False)
-              
-              print(f"✅ Metadata generated: {metadata_file}")
-              print(f"   Title: {metadata['title']}")
-              
-          except Exception as e:
-              print(f"⚠️  Metadata generation skipped: {e}")
-          PYTHON
+          print(f"✅ Metadata generated: {metadata_path}")
+          PYTHON_META
       
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: horoscope-video-${{ github.run_number }}
+          name: horoscope-output-${{ github.run_number }}
           path: |
             output/scripts/
             output/audio/
             output/videos/
           retention-days: 7
+          if-no-files-found: warn
       
-      - name: Post generation summary
+      - name: Summary
         if: success()
+        env:
+          FORMAT: ${{ steps.params.outputs.format }}
+          PROJECT: ${{ steps.params.outputs.project }}
         run: |
-          python3 << 'PYTHON'
+          python3 << 'EOF'
+          import os
           from pathlib import Path
           
-          project = "${{ env.PROJECT }}"
-          format = "${{ env.FORMAT }}"
+          project = os.getenv('PROJECT')
+          fmt = os.getenv('FORMAT')
+          output_dir = Path(f"output/videos/{project}")
           
-          video_dir = Path(f"output/videos/{project}")
-          video_files = list(video_dir.glob(f"{format}_*.mp4"))
+          video_files = sorted(list(output_dir.glob(f"{fmt}.mp4"))) if output_dir.exists() else []
           
           if video_files:
               video_path = video_files[-1]
-              print(f"\n" + "="*60)
-              print(f"✅ HOROSCOPE VIDEO GENERATION COMPLETED")
-              print(f"="*60)
-              print(f"\nProject: {project}")
-              print(f"Format: {format}")
-              print(f"Video: {video_path}")
-              print(f"Size: {video_path.stat().st_size / (1024*1024):.1f} MB")
-              print(f"\n📦 Artifacts uploaded to GitHub Actions")
-              print(f"⏭️  Next: Download and review, or publish to YouTube")
-              print(f"\n" + "="*60)
-          PYTHON
-      
-      - name: Publish to YouTube
-        if: ${{ github.event.inputs.publish == 'true' && success() }}
-        run: |
-          echo "🚀 Publishing to YouTube..."
-          echo "Note: Full YouTube integration in Part 4"
-          echo "For now, download the video from artifacts and publish manually"
+              size_mb = video_path.stat().st_size / (1024*1024)
+              print(f"\n" + "="*70)
+              print(f"✅ GENERATION COMPLETE")
+              print(f"="*70)
+              print(f"Video: {video_path.name}")
+              print(f"Size: {size_mb:.1f} MB")
+              print(f"\n📥 Download from GitHub Actions artifacts")
+              print(f"📤 Then publish to: YouTube, TikTok, Instagram")
+              print(f"")
+          else:
+              print(f"⚠️ Video file not found")
+          EOF
 
-  notify:
+  notify-result:
     runs-on: ubuntu-22.04
     needs: generate-video
-    if: always()
+    if: always() && secrets.TELEGRAM_BOT_TOKEN
     
     steps:
-      - name: Send Telegram notification
-        if: ${{ secrets.TELEGRAM_BOT_TOKEN && secrets.TELEGRAM_CHAT_ID }}
+      - name: Send notification
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FORMAT: ${{ github.event.inputs.format || 'shorts' }}
+          STATUS: ${{ needs.generate-video.result }}
         run: |
-          STATUS="${{ needs.generate-video.result }}"
-          EMOJI="✅"
-          
-          if [ "$STATUS" != "success" ]; then
+          if [ "$STATUS" = "success" ]; then
+            EMOJI="✅"
+            TEXT="Horoscope video generated successfully"
+          else
             EMOJI="❌"
+            TEXT="Horoscope video generation failed"
           fi
           
-          MESSAGE="$EMOJI Horoscope Video Generation: $STATUS\n"
-          MESSAGE="${MESSAGE}Format: ${{ github.event.inputs.format || 'shorts' }}\n"
-          MESSAGE="${MESSAGE}Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MESSAGE="$EMOJI $TEXT%0AFormat: $FORMAT%0AWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
           curl -s -X POST \
-            -H 'Content-Type: application/json' \
-            -d "{ \"chat_id\": \"$TELEGRAM_CHAT_ID\", \"text\": \"$MESSAGE\", \"parse_mode\": \"HTML\" }" \
-            "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage"
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            -d "chat_id=$TELEGRAM_CHAT_ID&text=$MESSAGE&parse_mode=HTML" \
+            "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" > /dev/null
