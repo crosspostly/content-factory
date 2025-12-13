@@ -4,9 +4,10 @@ from __future__ import annotations
 # Mock google.genai BEFORE any imports to prevent import errors
 import sys
 from unittest.mock import MagicMock
-sys.modules['google'] = MagicMock()
-sys.modules['google.genai'] = MagicMock()
-import os
+mock_google = MagicMock()
+mock_google.genai = MagicMock()
+sys.modules['google'] = mock_google
+sys.modules['google.genai'] = mock_google.genai
 import tempfile
 from pathlib import Path
 from typing import Any
