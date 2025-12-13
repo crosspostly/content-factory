@@ -8,17 +8,18 @@ from pathlib import Path
 from typing import Any
 import logging
 
-import google.generativeai as genai
+import edge_tts
 from pydub import AudioSegment
 from core.utils.config_loader import ProjectConfig
 
 logger = logging.getLogger(__name__)
 
 # ============ CONSTANTS ============
+# Edge TTS voices for Russian - updated Dec 2025
 VOICES = {
-    "russian_female_warm": "ru-RU-Neural2-C",    # Female, friendly
-    "russian_female_neutral": "ru-RU-Neural2-A", # Female, neutral
-    "russian_male": "ru-RU-Neural2-B",           # Male voice
+    "russian_female_warm": "ru-RU-SvetlanaNeural",   # Female, friendly (default)
+    "russian_female_dariya": "ru-RU-DariyaNeural",   # Female, natural
+    "russian_male": "ru-RU-DmitryNeural",            # Male voice
 }
 
 OUTPUT_SAMPLE_RATE = 22050
@@ -27,9 +28,9 @@ OUTPUT_CHANNELS = 1
 # ============ HELPER FUNCTIONS ============
 
 def _get_voice_from_config(config: ProjectConfig, mode: str) -> str:
-    """Get voice name from config, with fallbacks."""
+    """Get Edge-TTS voice name from config, with fallbacks."""
     try:
-        voice = config.audio.get("engines", {}).get("gemini-tts", {}).get("voice")
+        voice = config.audio.get("engines", {}).get("edge-tts", {}).get("voice")
         if voice:
             return voice
         
@@ -93,36 +94,34 @@ def _convert_mp3_to_wav(mp3_data: bytes, output_path: Path) -> float:
         raise
 
 
-async def _synthesize_gemini_tts_async(
-    api_key: str,
+async def _synthesize_edge_tts_async(
     text: str,
+    voice: str,
     output_path: Path,
     speed: float = 1.0
 ) -> float:
     """
-    Synthesize text using Gemini 2.5 TTS.
+    Synthesize text using Edge-TTS.
     Returns duration in seconds.
     """
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.5-flash")
-    
     try:
-        # Create TTS request via Gemini API
-        # Note: Gemini TTS is currently available through speech synthesis endpoint
-        response = model.generate_content(
-            f"Synthesize this text to speech with neutral Russian voice: {text}"
-        )
+        # Edge-TTS communication object
+        communicate = edge_tts.Communicate(text, voice, rate=f"{int(speed * 100)}%")
         
-        # For now, use fallback approach with pyttsx3 for local testing
-        # In production, use Google Cloud Text-to-Speech or Gemini speech synthesis endpoint
-        logger.info(f"✅ TTS request sent to Gemini: {len(text)} chars")
+        # Create output directory
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Save audio to file
+        await communicate.save(str(output_path))
         
         # Estimate duration based on text length (rough estimate)
         duration = max(len(text) / 10.0 * (2.0 - speed), 1.0)
         
+        logger.info(f"✅ Edge-TTS synthesized: {len(text)} chars -> {output_path}")
         return duration
+        
     except Exception as e:
-        logger.error(f"❌ Gemini TTS error: {e}")
+        logger.error(f"❌ Edge-TTS error: {e}")
         raise
 
 
@@ -132,11 +131,11 @@ async def _synthesize_shorts_async(
     api_key: str
 ) -> tuple[str, float]:
     """
-    Synthesize shorts script.
+    Synthesize shorts script using Edge-TTS.
     Returns (path, duration_sec)
     """
     voice = _get_voice_from_config(config, "shorts")
-    speed = config.audio.get("engines", {}).get("gemini-tts", {}).get("speed", 1.0)
+    speed = config.audio.get("engines", {}).get("edge-tts", {}).get("speed", 1.0)
     
     # Текст может быть в разных полях
     text = script.get("script") or script.get("narration_text") or script.get("hook", "")
@@ -149,7 +148,7 @@ async def _synthesize_shorts_async(
     project_slug = str(config.project.get("name", "project")).replace(" ", "_")
     output_path = Path("output") / "audio" / project_slug / "shorts_main.wav"
     
-    duration = await _synthesize_gemini_tts_async(api_key, text, output_path, speed)
+    duration = await _synthesize_edge_tts_async(text, voice, output_path, speed)
     return str(output_path), duration
 
 
@@ -163,7 +162,7 @@ async def _synthesize_long_form_async(
     Returns (blocks_dict, total_duration_sec)
     """
     voice = _get_voice_from_config(config, "long_form")
-    speed = config.audio.get("engines", {}).get("gemini-tts", {}).get("speed", 1.0)
+    speed = config.audio.get("engines", {}).get("edge-tts", {}).get("speed", 1.0)
     
     project_slug = str(config.project.get("name", "project")).replace(" ", "_")
     blocks = script.get("blocks", {})
@@ -176,7 +175,7 @@ async def _synthesize_long_form_async(
         text = _sanitize_text_for_tts(text)
         
         output_path = Path("output") / "audio" / project_slug / f"long_form_{block_name}.wav"
-        duration = await _synthesize_gemini_tts_async(api_key, text, output_path, speed)
+        duration = await _synthesize_edge_tts_async(text, voice, output_path, speed)
         
         output_paths[block_name] = str(output_path)
         total_duration += duration
@@ -190,11 +189,11 @@ async def _synthesize_ad_async(
     api_key: str
 ) -> tuple[str, float]:
     """
-    Synthesize ad script.
+    Synthesize ad script using Edge-TTS.
     Returns (path, duration_sec)
     """
     voice = _get_voice_from_config(config, "ad")
-    speed = config.audio.get("engines", {}).get("gemini-tts", {}).get("speed", 1.0)
+    speed = config.audio.get("engines", {}).get("edge-tts", {}).get("speed", 1.0)
     
     text = script.get("narration_text") or script.get("script", "")
     text = _sanitize_text_for_tts(text)
@@ -205,7 +204,7 @@ async def _synthesize_ad_async(
     project_slug = str(config.project.get("name", "project")).replace(" ", "_")
     output_path = Path("output") / "audio" / project_slug / "ad_main.wav"
     
-    duration = await _synthesize_gemini_tts_async(api_key, text, output_path, speed)
+    duration = await _synthesize_edge_tts_async(text, voice, output_path, speed)
     return str(output_path), duration
 
 
@@ -213,20 +212,17 @@ async def _synthesize_ad_async(
 
 def synthesize(config: ProjectConfig, script: Any, mode: str, api_key: str = None) -> dict[str, Any]:
     """
-    Main entry point for TTS synthesis using Gemini 2.5.
+    Main entry point for TTS synthesis using Edge-TTS.
     
     Args:
         config: ProjectConfig with audio settings
         script: Generated script dict
         mode: "shorts" | "long_form" | "ad"
-        api_key: Google AI API key (GOOGLE_AI_API_KEY env var)
+        api_key: Not used for Edge-TTS (provided for compatibility)
     
     Returns:
         Dict with audio paths and metadata
     """
-    
-    if not api_key:
-        raise ValueError("GOOGLE_AI_API_KEY not provided")
     
     try:
         # Run async synthesis
@@ -248,9 +244,9 @@ def synthesize(config: ProjectConfig, script: Any, mode: str, api_key: str = Non
         
         return {
             "blocks": blocks,
-            "background_music_path": None,  # Part 2.5 - музыка позже
-            "sound_effects": {},  # Part 2.5 - эффекты позже
-            "engine_used": "gemini-2.5-tts",
+            "background_music_path": None,  # Future: background music
+            "sound_effects": {},  # Future: sound effects
+            "engine_used": "edge-tts",
             "total_duration_sec": total_duration,
             "sample_rate": OUTPUT_SAMPLE_RATE,
             "channels": OUTPUT_CHANNELS,
