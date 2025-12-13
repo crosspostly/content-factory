@@ -1,0 +1,80 @@
+# SHARED CONFIGURATION FOR ALL PROJECTS
+# Common settings for debugging, generation, deployment
+# Project-specific settings override these in projects/<project>/config.yaml
+
+generation:
+  # Primary and fallback models (auto-selected by model_router)
+  primary_model: qwen2.5-coder:1.5b
+  fallback_models:
+    - gemini-2.5-flash
+  
+  # Generation parameters
+  temperature: 0.8
+  max_retries: 3
+  retry_delay_sec: 2
+
+debugger:
+  # Auto-fix agent settings (shared for all projects)
+  enabled: true
+  trigger_on_failure: true
+  create_issue: true
+  create_pr_if_possible: true
+  max_log_lines: 3000
+  
+  # Ollama settings for Qwen
+  ollama:
+    enabled: true
+    model: qwen2.5-coder:1.5b
+    cache_path: ~/.ollama
+    timeout_sec: 300
+
+audio:
+  # Common audio settings
+  enabled: true
+  fallback_engine: edge-tts
+  engines:
+    edge-tts:
+      enabled: true
+      speed: 1.0
+    gemini-tts:
+      enabled: false
+  background_music_enabled: true
+  sound_effects:
+    enabled: true
+
+video:
+  # Common video settings
+  fps: 30
+  codec: libx264
+  audio_codec: aac
+  quality: high
+
+subtitles:
+  # Common subtitle settings
+  enabled: true
+  font: Arial
+  font_size: 24
+  color: white
+  position: bottom
+
+caching:
+  # Common caching settings
+  enabled: true
+  ttl_days: 7
+
+monitoring:
+  # Common monitoring
+  telegram_notifications: false
+  slack_notifications: false
+  github_issues: true
+
+ci_cd:
+  # Common CI/CD settings
+  auto_fix_agent:
+    enabled: true
+    model: qwen2.5-coder:1.5b
+  tests:
+    enabled: true
+    fail_on_error: true
+  upload:
+    enabled: false  # Set per-project
