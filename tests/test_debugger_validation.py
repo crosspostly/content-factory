@@ -6,21 +6,21 @@ can detect, analyze, and fix the issue.
 import pytest
 
 
-def test_deliberate_failure_for_debugger_validation():
-    """This test will fail to validate debugger workflow."""
-    # Intentional assertion that will fail
-    assert 1 + 1 == 3, "Math check failed: 1 + 1 should equal 3 for testing"
+def test_deliberate_assertion_failure():
+    """This test will definitely fail with assertion error."""
+    # This will ALWAYS fail
+    assert False, "Deliberate test failure for debugger validation"
 
 
-def test_undefined_function_call():
-    """This test calls an undefined function to test error handling."""
-    result = undefined_helper_function(42)  # noqa: F821
-    assert result == 42
+def test_math_error():
+    """Simple math assertion that must fail."""
+    result = 1 + 1
+    assert result == 3, f"Expected 3 but got {result}"
 
 
-def test_type_error():
-    """This test will cause a TypeError."""
-    value = None
-    # This should raise TypeError: 'NoneType' object is not subscriptable
-    result = value[0]
-    assert result is not None
+def test_type_error_on_purpose():
+    """This test will raise TypeError."""
+    data = None
+    # This line will raise: TypeError: 'NoneType' object is not subscriptable
+    value = data[0]
+    assert value is not None
