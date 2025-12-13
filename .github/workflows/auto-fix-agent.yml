@@ -30,6 +30,68 @@ jobs:
           echo "head_branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
           echo "head_sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
       
+      - name: Detect project
+        id: project
+        run: |
+          python3 << 'PYTHON_SCRIPT'
+          import os
+          from pathlib import Path
+          
+          workflow_name = "${{ steps.workflow.outputs.workflow_name }}"
+          branch = "${{ steps.workflow.outputs.head_branch }}"
+          
+          # Strategy 1: Check if workflow path contains project name
+          # Example: .github/workflows/projects/youtube_horoscope/tests.yml
+          project_name = None
+          
+          # Strategy 2: From branch name
+          # Example: feature/youtube_horoscope-v2 -> youtube_horoscope
+          if not project_name and "/" in branch:
+              potential_project = branch.split("/")[1].split("-")[0]
+              if (Path("projects") / potential_project).exists():
+                  project_name = potential_project
+          
+          # Strategy 3: Try to find project with workflows that match
+          # Check projects/<project>/config.yaml for workflows.test matching workflow_name
+          if not project_name:
+              projects_dir = Path("projects")
+              for project_dir in projects_dir.iterdir():
+                  if not project_dir.is_dir():
+                      continue
+                  config_file = project_dir / "config.yaml"
+                  if not config_file.exists():
+                      continue
+                  
+                  # Simple check: if workflow_name is in project config workflows
+                  try:
+                      import yaml
+                      with open(config_file) as f:
+                          config = yaml.safe_load(f) or {}
+                      workflows = config.get("workflows", {}).get("test", [])
+                      if any(workflow_name.lower() in w.lower() for w in workflows):
+                          project_name = project_dir.name
+                          break
+                  except:
+                      pass
+          
+          # Strategy 4: Default to first project if only one exists
+          if not project_name:
+              projects = [d.name for d in Path("projects").iterdir() if d.is_dir()]
+              if len(projects) == 1:
+                  project_name = projects[0]
+          
+          if not project_name:
+              print("\u26a0️ Could not determine project from workflow or branch")
+              print(f"Workflow: {workflow_name}")
+              print(f"Branch: {branch}")
+              raise ValueError("Project detection failed")
+          
+          print(f"👀 Detected project: {project_name}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"name={project_name}\n")
+          
+          PYTHON_SCRIPT
+      
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -55,7 +117,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install google-generativeai openai requests pyyaml pandas ollama
+          pip install google-generativeai openai requests pyyaml pandas ollama pyyaml
       
       - name: Fetch GitHub Actions logs
         id: logs
@@ -96,7 +158,7 @@ jobs:
           
           PYTHON_SCRIPT
       
-      - name: Analyze with Qwen (from config)
+      - name: Analyze with Qwen (from merged config)
         id: analysis
         env:
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
@@ -111,15 +173,17 @@ jobs:
           from core.utils.model_router import generate_text
           from core.utils.config_loader import load as load_config
           
-          # Load project config - model comes from config.yaml
-          try:
-              config = load_config("youtube_horoscope")
-              model = config.generation.primary_model or "qwen2.5-coder:1.5b"
-          except:
-              # Fallback if config load fails
-              model = "qwen2.5-coder:1.5b"
+          project_name = "${{ steps.project.outputs.name }}"
           
-          print(f"🤖 Using model: {model}")
+          # Load project config (merged with shared.yaml)
+          try:
+              config = load_config(project_name)
+              model = config.generation.primary_model or "qwen2.5-coder:1.5b"
+              print(f"👀 Loaded config for project: {project_name}")
+              print(f"🤖 Using model: {model}")
+          except Exception as e:
+              print(f"Error loading config: {e}")
+              raise
           
           # Read logs
           with open("/tmp/workflow_logs.txt", "r") as f:
@@ -129,6 +193,7 @@ jobs:
           
           A GitHub Actions workflow failed. Analyze the error and provide a detailed technical solution.
           
+          Project: {project_name}
           Workflow Name: ${{ steps.workflow.outputs.workflow_name }}
           Branch: ${{ steps.workflow.outputs.head_branch }}
           Run #${{ steps.workflow.outputs.run_number }}
@@ -203,10 +268,12 @@ jobs:
           with open("/tmp/analysis.json", "r") as f:
               analysis = json.load(f)
           
-          issue_title = f"🔴 [{analysis.get('severity', 'medium').upper()}] {analysis.get('problem', 'Unknown')[:80]}"
+          project_name = "${{ steps.project.outputs.name }}"
+          issue_title = f"[{project_name}] 🔴 [{analysis.get('severity', 'medium').upper()}] {analysis.get('problem', 'Unknown')[:60]}"
           
           issue_body = f"""## 🚨 Failure Analysis
           
+          **Project:** {project_name}
           **Workflow:** ${{ steps.workflow.outputs.workflow_name }}
           **Run:** [${{ steps.workflow.outputs.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ steps.workflow.outputs.workflow_id }})
           **Branch:** `${{ steps.workflow.outputs.head_branch }}`
@@ -245,7 +312,7 @@ jobs:
                   "gh", "issue", "create",
                   "--title", issue_title,
                   "--body", issue_body,
-                  "--label", "bug,auto-generated,ai-analyzed"
+                  "--label", "bug,auto-generated,ai-analyzed,project:{}".format(project_name)
               ],
               capture_output=True,
               text=True,
@@ -278,16 +345,17 @@ jobs:
           file_to_modify = analysis.get('file_to_modify')
           code_fix = analysis.get('code_fix', '').strip()
           commit_msg = analysis.get('suggested_commit_message')
+          project_name = "${{ steps.project.outputs.name }}"
           
           if not file_to_modify or not code_fix:
               print("⚠️ No code fix to apply")
               exit(0)
           
-          print(f"🔧 Creating PR with auto-fix...")
+          print(f"🔧 Creating PR with auto-fix for project: {project_name}")
           print(f"📄 File: {file_to_modify}")
           
           timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-          branch_name = f"auto-fix/run-${{ steps.workflow.outputs.run_number }}-{timestamp}"
+          branch_name = f"auto-fix/{project_name}/run-${{ steps.workflow.outputs.run_number }}-{timestamp}"
           
           subprocess.run(["git", "config", "user.email", "auto-fix-agent@github.com"])
           subprocess.run(["git", "config", "user.name", "Auto-Fix Agent"])
@@ -299,7 +367,7 @@ jobs:
               
               subprocess.run(["git", "add", file_to_modify])
               result = subprocess.run(
-                  ["git", "commit", "-m", f"{commit_msg}\n\n[auto-fix-agent run #${{ steps.workflow.outputs.run_number }}]\nWorkflow: ${{ steps.workflow.outputs.workflow_name }}"],
+                  ["git", "commit", "-m", f"{commit_msg}\n\n[auto-fix-agent {project_name} run #${{ steps.workflow.outputs.run_number }}]\nWorkflow: ${{ steps.workflow.outputs.workflow_name }}"],
                   capture_output=True,
                   text=True
               )
@@ -310,8 +378,8 @@ jobs:
                   if result.returncode == 0:
                       print(f"✅ Pushed branch: {branch_name}")
                       
-                      pr_title = f"🔧 Auto-Fix: {analysis.get('problem', 'Unknown')[:60]}"
-                      pr_body = f"""## Auto-Fix PR
+                      pr_title = f"[{project_name}] 🔧 Auto-Fix: {analysis.get('problem', 'Unknown')[:50]}"
+                      pr_body = f"""## Auto-Fix PR [{project_name}]
                       
                       **Issue:** {analysis.get('problem', 'N/A')}
                       **Root Cause:** {analysis.get('root_cause', 'N/A')}
@@ -329,6 +397,7 @@ jobs:
                       
                       ---
                       *Created by Auto-Fix Agent 🤖 with ${{ steps.analysis.outputs.model_used }} AI*
+                      *Project: {project_name}*
                       *Please review and merge manually*
                       """
                       
@@ -339,7 +408,7 @@ jobs:
                               "--head", branch_name,
                               "--title", pr_title,
                               "--body", pr_body,
-                              "--label", "auto-generated,auto-fix,ai-generated"
+                              "--label", "auto-generated,auto-fix,ai-generated,project:{}".format(project_name)
                           ],
                           capture_output=True,
                           text=True,
@@ -359,8 +428,9 @@ jobs:
         run: |
           echo "## 🤖 Auto-Fix Agent Summary"
           echo ""
-          echo "**Status:** ${{ job.status }}"
+          echo "**Project:** ${{ steps.project.outputs.name }}"
           echo "**Workflow:** ${{ steps.workflow.outputs.workflow_name }}"
+          echo "**Status:** ${{ job.status }}"
           echo "**AI Model:** ${{ steps.analysis.outputs.model_used }}"
           echo "**Severity:** ${{ steps.analysis.outputs.severity }}"
           echo "**Auto-fix possible:** ${{ steps.analysis.outputs.auto_fix_possible }}"
@@ -372,4 +442,4 @@ jobs:
             echo "**PR:** ${{ steps.pr.outputs.pr_url }}"
           fi
           echo ""
-          echo "✅ Qwen 1.5B на Ollama - автоматический дебаггинг и фиксинг!"
+          echo "✅ Qwen 1.5B на Ollama - масштабируемый автоматический дебаггинг!"
