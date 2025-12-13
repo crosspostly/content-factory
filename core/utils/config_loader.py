@@ -56,6 +56,9 @@ class ConfigNode(Mapping[str, Any]):
 class ProjectConfig:
     """Project config loaded from YAML.
 
+    Merges shared config (config/shared.yaml) with project-specific config
+    (projects/<project_name>/config.yaml). Project-specific overrides shared.
+
     Provides dot-access similar to Pydantic models in the tech spec.
     """
 
@@ -71,6 +74,9 @@ class ProjectConfig:
         self.upload = ConfigNode(data.get("upload") or {})
         self.caching = ConfigNode(data.get("caching") or {})
         self.monitoring = ConfigNode(data.get("monitoring") or {})
+        self.debugger = ConfigNode(data.get("debugger") or {})
+        self.ci_cd = ConfigNode(data.get("ci_cd") or {})
+        self.workflows = ConfigNode(data.get("workflows") or {})
 
         self.content_plan_file = data.get("content_plan_file")
 
@@ -86,7 +92,21 @@ class ProjectConfig:
             "upload": self.upload.to_dict(),
             "caching": self.caching.to_dict(),
             "monitoring": self.monitoring.to_dict(),
+            "debugger": self.debugger.to_dict(),
+            "ci_cd": self.ci_cd.to_dict(),
+            "workflows": self.workflows.to_dict(),
         }
+
+
+def _merge_dicts(shared: dict[str, Any], project: dict[str, Any]) -> dict[str, Any]:
+    """Deep merge: project values override shared values."""
+    result = shared.copy()
+    for key, value in project.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _merge_dicts(result[key], value)
+        else:
+            result[key] = value
+    return result
 
 
 def _validate_required(data: dict[str, Any]) -> None:
@@ -107,23 +127,44 @@ def _validate_required(data: dict[str, Any]) -> None:
 
 
 def load(project_name: str) -> ProjectConfig:
-    """Read `projects/<project_name>/config.yaml`.
+    """Load project config by merging shared config with project-specific config.
+
+    1. Load shared config from config/shared.yaml
+    2. Load project config from projects/<project_name>/config.yaml
+    3. Merge: project values override shared
+    4. Validate required sections
 
     Raises:
-        FileNotFoundError: if config.yaml is missing
+        FileNotFoundError: if config files are missing
         ValueError: if YAML is invalid or missing required sections
     """
 
-    config_path = Path("projects") / project_name / "config.yaml"
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config not found: {config_path}")
+    # Load shared config
+    shared_path = Path("config") / "shared.yaml"
+    if not shared_path.exists():
+        raise FileNotFoundError(f"Shared config not found: {shared_path}")
 
-    with config_path.open("r", encoding="utf-8") as f:
-        data = safe_load(f) or {}
+    with shared_path.open("r", encoding="utf-8") as f:
+        shared_data = safe_load(f) or {}
 
-    if not isinstance(data, dict):
-        raise ValueError("Top-level YAML must be a mapping")
+    if not isinstance(shared_data, dict):
+        raise ValueError("Shared config YAML must be a mapping")
 
+    # Load project config
+    project_path = Path("projects") / project_name / "config.yaml"
+    if not project_path.exists():
+        raise FileNotFoundError(f"Project config not found: {project_path}")
+
+    with project_path.open("r", encoding="utf-8") as f:
+        project_data = safe_load(f) or {}
+
+    if not isinstance(project_data, dict):
+        raise ValueError(f"Project config ({project_name}) YAML must be a mapping")
+
+    # Merge: project overrides shared
+    data = _merge_dicts(shared_data, project_data)
+
+    # Ensure project.folder is set
     data.setdefault("project", {})
     if isinstance(data["project"], dict):
         data["project"].setdefault("folder", project_name)
@@ -137,6 +178,30 @@ def load(project_name: str) -> ProjectConfig:
 
     _validate_required(data)
     return ProjectConfig(data)
+
+
+def load_all_projects() -> dict[str, ProjectConfig]:
+    """Load all project configs from projects/ directory.
+
+    Returns:
+        Dict mapping project_name -> ProjectConfig
+    """
+    projects_dir = Path("projects")
+    result = {}
+
+    for project_dir in projects_dir.iterdir():
+        if not project_dir.is_dir():
+            continue
+        config_file = project_dir / "config.yaml"
+        if not config_file.exists():
+            continue
+        try:
+            result[project_dir.name] = load(project_dir.name)
+        except Exception as e:
+            # Log error but continue loading other projects
+            print(f"Warning: Failed to load project {project_dir.name}: {e}")
+
+    return result
 
 
 def load_content_plan(project_name: str) -> dict[str, Any]:
