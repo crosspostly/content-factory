@@ -2,11 +2,11 @@ name: Auto-Fix Agent
 
 on:
   workflow_run:
-    workflows: ["tests.yml", "part1-test.yml", "tests-docker.yml"]
+    workflows: ["tests.yml", "part1-test.yml"]
     types: [completed]
 
 jobs:
-  analyze-and-fix:
+  analyze-failure:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
     permissions:
@@ -14,7 +14,6 @@ jobs:
       actions: read
       issues: write
       pull-requests: write
-      repository-projects: read
     
     steps:
       - name: Checkout repo
@@ -22,7 +21,7 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Get workflow details
+      - name: Get workflow run details
         id: workflow
         run: |
           echo "workflow_name=${{ github.event.workflow_run.name }}" >> $GITHUB_OUTPUT
@@ -31,85 +30,227 @@ jobs:
           echo "head_branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
           echo "head_sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
       
-      - name: Download workflow artifacts
-        run: |
-          mkdir -p /tmp/artifacts
-          gh run download ${{ github.event.workflow_run.id }} -D /tmp/artifacts || echo "No artifacts found"
-        env:
-          GH_TOKEN: ${{ github.token }}
-      
-      - name: Fetch workflow logs
-        id: logs
-        run: |
-          gh run view ${{ github.event.workflow_run.id }} --log > /tmp/workflow.log 2>&1 || true
-          
-          # Extract last 100 lines with errors
-          tail -100 /tmp/workflow.log > /tmp/error_context.log || cat /tmp/workflow.log > /tmp/error_context.log
-          
-          # Count errors
-          ERROR_COUNT=$(grep -i "error\|failed\|exception" /tmp/workflow.log | wc -l)
-          echo "error_count=$ERROR_COUNT" >> $GITHUB_OUTPUT
-          echo "log_size=$(wc -c < /tmp/workflow.log)" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ github.token }}
-      
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
       
-      - name: Create issue with error analysis
-        id: issue
+      - name: Setup Ollama for Qwen (cached)
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama
+          key: ollama-qwen-Linux
+          restore-keys: ollama-qwen-
+      
+      - name: Install Ollama & pull Qwen model
+        run: |
+          curl -fsSL https://ollama.ai/install.sh | sh
+          # Start Ollama in background
+          ollama serve &
+          sleep 3
+          # Pull smaller model for GitHub Actions (1.5B fits in 7GB limit)
+          ollama pull qwen2.5-coder:1.5b
+          echo "✅ Qwen model ready"
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install google-generativeai openai requests pyyaml pandas ollama
+      
+      - name: Fetch GitHub Actions logs
+        id: logs
         run: |
           python3 << 'PYTHON_SCRIPT'
           import subprocess
           import os
+          
+          workflow_id = "${{ steps.workflow.outputs.workflow_id }}"
+          
+          result = subprocess.run(
+              ["gh", "run", "view", workflow_id, "--log"],
+              capture_output=True,
+              text=True,
+              env={**os.environ, "GH_TOKEN": "${{ github.token }}"}
+          )
+          
+          logs = result.stdout + result.stderr
+          
+          with open("/tmp/workflow_logs.txt", "w") as f:
+              f.write(logs)
+          
+          # Extract error section
+          lines = logs.split("\n")
+          error_lines = []
+          capture = False
+          for line in lines:
+              if "error" in line.lower() or "failed" in line.lower() or capture:
+                  error_lines.append(line)
+                  capture = True
+              if capture and len(error_lines) > 100:
+                  break
+          
+          error_summary = "\n".join(error_lines[-50:])
+          
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"error_summary<<EOF\n{error_summary}\nEOF\n")
+          
+          PYTHON_SCRIPT
+      
+      - name: Analyze with Qwen
+        id: analysis
+        env:
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          python3 << 'PYTHON_SCRIPT'
           import json
+          import os
+          import sys
+          sys.path.insert(0, os.getcwd())
+          
+          from core.utils.model_router import generate_text
+          from core.utils.config_loader import ProjectConfig
+          
+          # Determine which model to use
+          use_qwen = True  # Try Qwen first (local, free)
+          model = "qwen2.5-coder:1.5b"
+          
+          if not use_qwen or not os.getenv("OLLAMA_HOST"):
+              # Fallback to Gemini
+              model = "gemini-2.0-flash"
+              use_qwen = False
+          
+          print(f"🤖 Using model: {model}")
+          
+          # Read logs
+          with open("/tmp/workflow_logs.txt", "r") as f:
+              logs = f.read()[-3000:]  # Last 3000 chars
+          
+          prompt = f"""You are an expert DevOps engineer and software developer.
+          
+          A GitHub Actions workflow failed. Analyze the error and provide a detailed technical task.
+          
+          Workflow Name: ${{ steps.workflow.outputs.workflow_name }}
+          Branch: ${{ steps.workflow.outputs.head_branch }}
+          Run #${{ steps.workflow.outputs.run_number }}
+          
+          Error Logs:
+          ```
+          {logs}
+          ```
+          
+          Provide analysis in this JSON format:
+          {{
+            "problem": "Brief description of what failed",
+            "root_cause": "Why it happened",
+            "severity": "critical|high|medium|low",
+            "solution_steps": ["step 1", "step 2", ...],
+            "code_fix": "Python/YAML code to fix (if applicable) or empty string",
+            "file_to_modify": "path/to/file or null",
+            "suggested_commit_message": "git commit message",
+            "technical_task": "Detailed technical task for fixing",
+            "auto_fix_possible": true/false
+          }}
+          
+          Be precise and actionable."""
+          
+          try:
+              # Create minimal config for model_router
+              class GenConfig:
+                  primary_model = model
+                  fallback_models = ["gemini-2.0-flash"] if use_qwen else []
+                  temperature = 0.7
+                  max_retries = 1
+              
+              class Config:
+                  generation = GenConfig()
+              
+              response = generate_text(Config(), prompt)
+              
+              # Parse JSON from response
+              import re
+              match = re.search(r'\{[\s\S]*\}', response)
+              if match:
+                  analysis = json.loads(match.group())
+              else:
+                  raise ValueError("No JSON found in response")
+          
+          except Exception as e:
+              print(f"Error calling LLM: {e}")
+              analysis = {
+                  "problem": f"LLM analysis failed: {str(e)}",
+                  "root_cause": "Could not analyze logs",
+                  "severity": "high",
+                  "solution_steps": [],
+                  "auto_fix_possible": False,
+                  "code_fix": ""
+              }
+          
+          # Save analysis
+          with open("/tmp/analysis.json", "w") as f:
+              json.dump(analysis, f, indent=2)
+          
+          # Output for next steps
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"problem={analysis.get('problem', 'Unknown')[:100]}\n")
+              f.write(f"severity={analysis.get('severity', 'medium')}\n")
+              f.write(f"auto_fix_possible={str(analysis.get('auto_fix_possible', False)).lower()}\n")
+              f.write(f"model_used={'qwen' if use_qwen else 'gemini'}\n")
+          
+          print(json.dumps(analysis, indent=2))
+          
+          PYTHON_SCRIPT
+      
+      - name: Create GitHub Issue
+        if: always()
+        id: issue
+        run: |
+          python3 << 'PYTHON_SCRIPT'
+          import json
+          import subprocess
+          import os
           from datetime import datetime
           
-          # Read error logs
-          try:
-              with open('/tmp/error_context.log', 'r') as f:
-                  error_logs = f.read()
-          except:
-              error_logs = "No logs available"
+          with open("/tmp/analysis.json", "r") as f:
+              analysis = json.load(f)
           
-          workflow_name = "${{ steps.workflow.outputs.workflow_name }}"
-          run_id = "${{ steps.workflow.outputs.workflow_id }}"
-          run_number = "${{ steps.workflow.outputs.run_number }}"
+          issue_title = f"🔴 [{analysis.get('severity', 'medium').upper()}] {analysis.get('problem', 'Unknown')[:80]}"
           
-          # Parse main error
-          error_lines = [line for line in error_logs.split('\n') if 'error' in line.lower() or 'failed' in line.lower()]
-          main_error = error_lines[-1] if error_lines else "Unknown error"
+          issue_body = f"""## 🚨 Failure Analysis
           
-          issue_title = f"🔴 [{workflow_name} #{run_number}] Workflow failed"
+          **Workflow:** ${{ steps.workflow.outputs.workflow_name }}
+          **Run:** [${{ steps.workflow.outputs.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ steps.workflow.outputs.workflow_id }})
+          **Branch:** `${{ steps.workflow.outputs.head_branch }}`
+          **Commit:** `${{ steps.workflow.outputs.head_sha }}`
+          **AI Model Used:** `${{ steps.analysis.outputs.model_used }}`
           
-          issue_body = f"""## Automated Failure Report
+          ### Problem
+          {analysis.get('problem', 'N/A')}
           
-**Workflow:** [{workflow_name}](https://github.com/${{ github.repository }}/actions/runs/{run_id})
-**Run:** #{run_number}
-**Branch:** `${{ steps.workflow.outputs.head_branch }}`
-**Commit:** `${{ steps.workflow.outputs.head_sha }}`
-**Time:** {datetime.now().isoformat()}
-
-### Error Summary
-```
-{main_error[:500]}
-```
-
-### Error Context (Last 50 lines)
-```
-{chr(10).join(error_logs.split(chr(10))[-50:])}
-```
-
-### Next Steps
-1. ✅ **Copilot is analyzing** this failure
-2. An auto-fix PR will be created if possible
-3. Manual review recommended before merge
-
----
-*Generated by Auto-Fix Agent 🤖*
-"""
+          ### Root Cause
+          {analysis.get('root_cause', 'N/A')}
+          
+          ### Severity
+          **{analysis.get('severity', 'medium').upper()}**
+          
+          ### Solution Steps
+          {chr(10).join(f'- {step}' for step in analysis.get('solution_steps', []))}
+          
+          ### Technical Task
+          {analysis.get('technical_task', 'N/A')}
+          
+          ### Suggested Code Fix
+          ```python
+          {analysis.get('code_fix', 'N/A')}
+          ```
+          
+          ### Auto-Fix Status
+          - Auto-fix possible: `{analysis.get('auto_fix_possible', False)}`
+          - Analyzed with: `{os.getenv("MODEL_USED", "unknown")}`
+          
+          ---
+          *Generated by Auto-Fix Agent 🤖 at {datetime.now().isoformat()}*
+          """
           
           result = subprocess.run(
               [
@@ -129,103 +270,118 @@ jobs:
               with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                   f.write(f"issue_url={issue_url}\n")
           else:
-              print(f"⚠️ Failed to create issue")
+              print(f"⚠️ Failed to create issue: {result.stderr}")
           
           PYTHON_SCRIPT
       
-      - name: Assign Copilot to analyze
-        if: ${{ steps.issue.outputs.issue_url != '' }}
-        run: |
-          # Extract issue number from URL
-          ISSUE_URL="${{ steps.issue.outputs.issue_url }}"
-          ISSUE_NUMBER=$(echo $ISSUE_URL | grep -oP '(?<=/issues/)\d+')
-          
-          echo "📋 Assigned issue #$ISSUE_NUMBER for Copilot analysis"
-          echo "🤖 Copilot will:"
-          echo "  - Analyze the workflow logs"
-          echo "  - Identify root cause"
-          echo "  - Create fix PR if applicable"
-          echo "  - Add detailed comments"
-          echo ""
-          echo "📍 Issue: ${{ steps.issue.outputs.issue_url }}"
-        env:
-          GH_TOKEN: ${{ github.token }}
-      
-      - name: Trigger Copilot coding task
-        continue-on-error: true
+      - name: Create PR with Auto-Fix
+        if: ${{ steps.analysis.outputs.auto_fix_possible == 'true' }}
+        id: pr
         run: |
           python3 << 'PYTHON_SCRIPT'
-          import subprocess
+          import json
           import os
+          import subprocess
+          import datetime
           
-          issue_url = "${{ steps.issue.outputs.issue_url }}"
-          if not issue_url:
-              print("No issue created, skipping Copilot assignment")
+          with open("/tmp/analysis.json", "r") as f:
+              analysis = json.load(f)
+          
+          file_to_modify = analysis.get('file_to_modify')
+          code_fix = analysis.get('code_fix', '').strip()
+          commit_msg = analysis.get('suggested_commit_message')
+          
+          if not file_to_modify or not code_fix:
+              print("⚠️ No code fix to apply")
               exit(0)
           
-          # Extract owner, repo, issue_number
-          parts = issue_url.strip('/').split('/')
-          owner = parts[-4]
-          repo = parts[-3]
-          issue_number = parts[-1]
+          print(f"🔧 Creating PR with auto-fix...")
+          print(f"📄 File: {file_to_modify}")
           
-          print(f"🚀 Assigning Copilot to issue #{issue_number}...")
-          print(f"   Owner: {owner}")
-          print(f"   Repo: {repo}")
+          timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+          branch_name = f"auto-fix/run-${{ steps.workflow.outputs.run_number }}-{timestamp}"
           
-          # Use GitHub CLI to assign (Copilot assignment requires GitHub Enterprise)
-          # For now, just add comment indicating Copilot should review
-          comment_body = """🤖 **Copilot Auto-Analysis Initiated**
+          subprocess.run(["git", "config", "user.email", "auto-fix-agent@github.com"])
+          subprocess.run(["git", "config", "user.name", "Auto-Fix Agent"])
+          subprocess.run(["git", "checkout", "-b", branch_name, "origin/main"])
           
-Copilot will analyze this workflow failure and provide:
-- Root cause analysis
-- Suggested fixes
-- Code changes in PR form
-
-**Checklist:**
-- [ ] Analyze workflow logs
-- [ ] Identify failing component
-- [ ] Propose solution
-- [ ] Create fix PR
-
-ETA: 2-5 minutes
-          """
-          
-          result = subprocess.run(
-              [
-                  "gh", "issue", "comment", str(issue_number),
-                  "--body", comment_body
-              ],
-              capture_output=True,
-              text=True,
-              env={**os.environ, "GH_TOKEN": "${{ github.token }}", "GH_REPO": f"{owner}/{repo}"}
-          )
-          
-          if result.returncode == 0:
-              print("✅ Added Copilot analysis comment")
-          else:
-              print(f"Note: {result.stderr}")
+          if os.path.exists(file_to_modify):
+              with open(file_to_modify, "w") as f:
+                  f.write(code_fix)
+              
+              subprocess.run(["git", "add", file_to_modify])
+              result = subprocess.run(
+                  ["git", "commit", "-m", f"{commit_msg}\n\n[auto-fix-agent run #${{ steps.workflow.outputs.run_number }}]\nWorkflow: ${{ steps.workflow.outputs.workflow_name }}"],
+                  capture_output=True,
+                  text=True
+              )
+              
+              if result.returncode == 0:
+                  result = subprocess.run(["git", "push", "-u", "origin", branch_name], capture_output=True, text=True)
+                  
+                  if result.returncode == 0:
+                      print(f"✅ Pushed branch: {branch_name}")
+                      
+                      pr_title = f"🔧 Auto-Fix: {analysis.get('problem', 'Unknown')[:60]}"
+                      pr_body = f"""## Auto-Fix PR
+                      
+                      **Issue:** {analysis.get('problem', 'N/A')}
+                      **Root Cause:** {analysis.get('root_cause', 'N/A')}
+                      **Severity:** {analysis.get('severity', 'medium')}
+                      **AI Model:** `${{ steps.analysis.outputs.model_used }}`
+                      
+                      ### Solution
+                      {chr(10).join(f'- {step}' for step in analysis.get('solution_steps', []))}
+                      
+                      ### Changed Files
+                      - `{file_to_modify}`
+                      
+                      ### Workflow Run
+                      [${{ steps.workflow.outputs.workflow_name }} #${{ steps.workflow.outputs.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ steps.workflow.outputs.workflow_id }})
+                      
+                      ---
+                      *Created by Auto-Fix Agent 🤖 with ${{ steps.analysis.outputs.model_used }} AI*
+                      *Please review and merge manually*
+                      """
+                      
+                      result = subprocess.run(
+                          [
+                              "gh", "pr", "create",
+                              "--base", "main",
+                              "--head", branch_name,
+                              "--title", pr_title,
+                              "--body", pr_body,
+                              "--label", "auto-generated,auto-fix,ai-generated"
+                          ],
+                          capture_output=True,
+                          text=True,
+                          env={**os.environ, "GH_TOKEN": "${{ github.token }}"}
+                      )
+                      
+                      if result.returncode == 0:
+                          pr_url = result.stdout.strip()
+                          print(f"✅ Created PR: {pr_url}")
+                          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                              f.write(f"pr_url={pr_url}\n")
           
           PYTHON_SCRIPT
       
       - name: Summary
         if: always()
         run: |
-          echo "## 🤖 Auto-Fix Agent Status"
+          echo "## 🤖 Auto-Fix Agent Summary"
           echo ""
+          echo "**Status:** ${{ job.status }}"
           echo "**Workflow:** ${{ steps.workflow.outputs.workflow_name }}"
-          echo "**Run:** #${{ steps.workflow.outputs.run_number }}"
-          echo "**Errors found:** ${{ steps.logs.outputs.error_count }}"
+          echo "**AI Model:** ${{ steps.analysis.outputs.model_used }}"
+          echo "**Severity:** ${{ steps.analysis.outputs.severity }}"
+          echo "**Auto-fix possible:** ${{ steps.analysis.outputs.auto_fix_possible }}"
           echo ""
           if [ "${{ steps.issue.outputs.issue_url }}" != "" ]; then
-            echo "**✅ Issue created:** ${{ steps.issue.outputs.issue_url }}"
-            echo "**🤖 Copilot assigned for analysis**"
-          else
-            echo "⚠️ No issue created (may be in progress)"
+            echo "**Issue:** ${{ steps.issue.outputs.issue_url }}"
+          fi
+          if [ "${{ steps.pr.outputs.pr_url }}" != "" ]; then
+            echo "**PR:** ${{ steps.pr.outputs.pr_url }}"
           fi
           echo ""
-          echo "### What happens next:
-          echo "1. ✅ Issue created with error context"
-          echo "2. 🤖 Copilot analyzes workflow logs"
-          echo "3. 📝 Auto-fix PR created (if possible)"
-          echo "4. 👀 Manual review recommended"
+          echo "✅ Qwen на Ollama - дебаггинг и фиксинг ошибок!"
