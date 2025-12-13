@@ -207,7 +207,8 @@ jobs:
           echo "✅ Video generation complete"
           echo "Format: ${{ steps.params.outputs.format }}"
           echo "Date: ${{ steps.params.outputs.date }}"
-          echo "\n📥 Download from artifacts"
+          echo ""
+          echo "📥 Download from artifacts"
           echo "📤 Then publish to social media"
 
   notify-result:
