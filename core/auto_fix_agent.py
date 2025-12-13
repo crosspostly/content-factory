@@ -388,3 +388,166 @@ See diff below for code changes.
     except Exception as e:
         logger.error(f"Exception creating PR: {e}")
         return None
+
+
+def create_github_issue(
+    project_name: str,
+    workflow_id: str,
+    workflow_run_number: str,
+    analysis: dict,
+) -> Optional[str]:
+    """Alias for create_issue() - for backward compatibility with workflows.
+    
+    Args:
+        project_name: Project identifier
+        workflow_id: GitHub workflow run ID
+        workflow_run_number: GitHub workflow run number
+        analysis: Analysis dictionary from analyze_workflow_error()
+    
+    Returns:
+        Issue URL if successful, None otherwise
+    """
+    return create_issue(project_name, workflow_id, workflow_run_number, analysis)
+
+
+def classify_error_complexity(analysis: dict) -> str:
+    """Classify error as SIMPLE (auto-fixable) or COMPLEX (needs manual work).
+    
+    Args:
+        analysis: Analysis dictionary from analyze_workflow_error()
+    
+    Returns:
+        "SIMPLE" or "COMPLEX"
+    """
+    # Check if LLM already marked it as auto-fixable
+    if analysis.get('auto_fix_possible', False):
+        # Additional validation: check if we have actual code fix
+        if analysis.get('code_fix') and analysis.get('file_to_modify'):
+            return "SIMPLE"
+    
+    # Check error patterns that are typically simple
+    problem_lower = analysis.get('problem', '').lower()
+    root_cause_lower = analysis.get('root_cause', '').lower()
+    
+    simple_patterns = [
+        'missing import',
+        'modulenotfounderror',
+        'importerror',
+        'syntax error',
+        'indentation',
+        'missing attribute',
+        'attributeerror',
+        'file not found',
+        'permissionerror',
+        'yaml syntax',
+    ]
+    
+    for pattern in simple_patterns:
+        if pattern in problem_lower or pattern in root_cause_lower:
+            # But only if we have a fix
+            if analysis.get('code_fix') and analysis.get('file_to_modify'):
+                return "SIMPLE"
+    
+    # Everything else is complex
+    return "COMPLEX"
+
+
+def apply_auto_fix(
+    analysis: dict,
+    branch_name: str,
+    commit_message: Optional[str] = None,
+) -> bool:
+    """Apply automatic fix: modify file, commit, push to branch.
+    
+    Args:
+        analysis: Analysis dictionary with code_fix and file_to_modify
+        branch_name: Branch name to create and push
+        commit_message: Custom commit message (optional)
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    file_to_modify = analysis.get('file_to_modify')
+    code_fix = analysis.get('code_fix')
+    
+    if not file_to_modify or not code_fix:
+        logger.error("No file_to_modify or code_fix in analysis")
+        return False
+    
+    try:
+        # Create and checkout new branch
+        result = subprocess.run(
+            ['git', 'checkout', '-b', branch_name],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        
+        if result.returncode != 0:
+            # Branch might already exist, try to checkout
+            result = subprocess.run(
+                ['git', 'checkout', branch_name],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode != 0:
+                logger.error(f"Failed to checkout branch: {result.stderr}")
+                return False
+        
+        logger.info(f"Checked out branch: {branch_name}")
+        
+        # Apply the fix to file
+        if not apply_fix_to_file(file_to_modify, code_fix):
+            logger.error(f"Failed to apply fix to {file_to_modify}")
+            return False
+        
+        # Format code with black (optional, ignore errors)
+        subprocess.run(
+            ['black', file_to_modify],
+            capture_output=True,
+            timeout=10,
+        )
+        
+        # Git add
+        result = subprocess.run(
+            ['git', 'add', file_to_modify],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            logger.error(f"Git add failed: {result.stderr}")
+            return False
+        
+        # Git commit
+        msg = commit_message or analysis.get('suggested_commit_message', 'fix: auto-fix')
+        result = subprocess.run(
+            ['git', 'commit', '-m', msg],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            logger.error(f"Git commit failed: {result.stderr}")
+            return False
+        
+        logger.info(f"Committed changes: {msg}")
+        
+        # Git push
+        result = subprocess.run(
+            ['git', 'push', '-u', 'origin', branch_name],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            logger.error(f"Git push failed: {result.stderr}")
+            return False
+        
+        logger.info(f"Pushed to branch: {branch_name}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Exception in apply_auto_fix: {e}")
+        return False

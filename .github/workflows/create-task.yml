@@ -1,0 +1,88 @@
+name: Create Developer Task (Complex Errors)
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  create-task:
+    name: Create Detailed Task
+    runs-on: ubuntu-latest
+    # Only run if issue has 'needs-dev-task' label
+    if: github.event.label.name == 'needs-dev-task'
+    
+    steps:
+      - name: Add detailed instructions
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            
+            const taskComment = [
+              '## 🎯 ТЕХНИЧЕСКОЕ ЗАДАНИЕ ДЛЯ РАЗРАБОТЧИКА',
+              '',
+              'This issue requires **manual intervention** as it\'s too complex for automatic fixing.',
+              '',
+              '### 📋 Your Action Plan',
+              '',
+              '1. **Read the analysis above** - understand the root cause',
+              '2. **Review the affected files** - check the code context',
+              '3. **Implement the fix** in your local branch',
+              '4. **Run the tests** to verify the fix works:',
+              '   ```bash',
+              '   pytest tests/ -v -m "not slow"',
+              '   ```',
+              '5. **Commit and push** your changes',
+              '6. **Create a PR** and reference this issue: `Fixes #' + issue.number + '`',
+              '',
+              '### ✅ Definition of Done',
+              '',
+              '- [ ] Root cause is addressed',
+              '- [ ] All tests pass locally',
+              '- [ ] Code follows project conventions',
+              '- [ ] PR is created and linked to this issue',
+              '',
+              '### 🤖 Auto-Fix Note',
+              '',
+              'This issue was analyzed by Auto-Fix Agent but determined to be too complex for automatic fixing.',
+              'Common reasons:',
+              '- Logic bugs requiring design decisions',
+              '- Architecture changes needed',
+              '- External API integration issues',
+              '- Performance optimizations required',
+              '',
+              '---',
+              '',
+              '**Questions?** Comment on this issue or ask the team.',
+              '',
+              '*Task created by Auto-Fix Agent 🤖*'
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: taskComment
+            });
+            
+            console.log(`✅ Added developer task instructions to issue #${issue.number}`);
+      
+      - name: Assign labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            
+            // Add additional helpful labels
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              labels: ['help wanted', 'good first issue']
+            }).catch((error) => {
+              console.log(`Could not add labels: ${error.message}`);
+            });
