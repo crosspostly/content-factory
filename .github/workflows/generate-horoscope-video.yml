@@ -253,7 +253,7 @@ jobs:
     
     steps:
       - name: Send Telegram notification
-        if: secrets.TELEGRAM_BOT_TOKEN
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
           FORMAT="${{ github.event.inputs.format || 'shorts' }}"
           STATUS="${{ needs.generate-video.result }}"
