@@ -186,12 +186,21 @@ def mock_config_with_qwen():
 
 @pytest.fixture
 def error_log_fixtures() -> dict[str, str]:
-    """Load error log fixtures for testing."""
+    """Load error log fixtures for testing (safely handle missing directory)."""
     fixtures_dir = Path(__file__).parent / "fixtures" / "error_logs"
     logs = {}
     
-    if fixtures_dir.exists():
-        for log_file in fixtures_dir.glob("*.log"):
-            logs[log_file.stem] = log_file.read_text()
+    # Safely check if directory exists before trying to read
+    try:
+        if fixtures_dir.exists() and fixtures_dir.is_dir():
+            for log_file in fixtures_dir.glob("*.log"):
+                try:
+                    logs[log_file.stem] = log_file.read_text(encoding='utf-8')
+                except (IOError, OSError) as e:
+                    # Skip files that can't be read
+                    print(f"Warning: Could not read {log_file}: {e}")
+    except (OSError, ValueError) as e:
+        # If directory operations fail, just continue with empty dict
+        print(f"Warning: Could not access fixtures directory: {e}")
     
     return logs
