@@ -9,6 +9,12 @@ import pytest
 
 from core.utils.config_loader import ProjectConfig
 
+# Mock google.genai to prevent import errors during patch decoration
+import sys
+if 'google.genai' not in sys.modules:
+    sys.modules['google'] = MagicMock()
+    sys.modules['google.genai'] = MagicMock()
+
 
 class TestWorkflowPipelineMock:
     """Test the complete pipeline flow as executed in GitHub Actions workflow."""
