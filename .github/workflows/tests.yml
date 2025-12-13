@@ -53,6 +53,22 @@ jobs:
           python -m core.utils || echo "Environment checker skipped (optional)"
         continue-on-error: true
       
+      - name: Run Pipeline Workflow Mock Tests
+        env:
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || 'test-key-for-ci' }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY || 'test-key-for-ci' }}
+        run: |
+          echo "🧪 Validating pipeline workflow mocks..."
+          echo ""
+          if [ -f "tests/test_pipeline_workflow_mock.py" ]; then
+            pytest tests/test_pipeline_workflow_mock.py -v --tb=short
+            echo ""
+            echo "✅ Pipeline workflow validation passed!"
+          else
+            echo "⚠️  test_pipeline_workflow_mock.py not found, skipping"
+          fi
+        continue-on-error: false
+      
       - name: Run Unit Tests
         env:
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || 'test-key-for-ci' }}
