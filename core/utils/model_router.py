@@ -1,218 +1,314 @@
-from __future__ import annotations
+"""
+Model Router with Fallback & Retry Logic
+
+Based on proven patterns from youtube_podcast.
+Features:
+  - Primary model (fast) → Fallback model (powerful)
+  - Exponential backoff retries (2s, 4s, 8s)
+  - Detailed logging for audit trail
+  - Automatic JSON error recovery
+"""
 
 import logging
+import json
 import time
-from dataclasses import dataclass
-from typing import Any
-
-from .config_loader import ProjectConfig
-from . import secrets_manager
+from typing import Callable, Any, Optional, Dict
+import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
 
+# Model configuration
+MODELS = {
+    "script": {
+        "primary": "gemini-2.5-flash",
+        "fallback": "gemini-2.0-flash"
+    },
+    "tts": {
+        "primary": "gemini-2.5-flash",
+        "fallback": "gemini-2.0-flash"
+    },
+    "image_gen": {
+        "primary": "gemini-2.5-flash",
+        "fallback": "gemini-2.0-flash"
+    }
+}
 
-@dataclass
-class ProviderCallError(RuntimeError):
-    message: str
-    status_code: int | None = None
-
-    def __str__(self) -> str:  # pragma: no cover
-        if self.status_code is None:
-            return self.message
-        return f"{self.message} (status_code={self.status_code})"
+# Retry configuration
+MAX_RETRIES = 3
+BASE_RETRY_DELAY = 2  # seconds
+MAX_RETRY_DELAY = 16  # cap at 16 seconds
 
 
-def generate_text(
-    config: ProjectConfig,
-    prompt: str,
-    system_prompt: str | None = None,
-    model_hint: str | None = None,
-    temperature: float | None = None,
-) -> str:
-    """Generate text using configured LLM with fallbacks.
-
-    The config supports both the newer schema:
-      generation.primary_model + generation.fallback_models
-    and the legacy schema:
-      generation.model
+class ModelRouter:
     """
-
-    gen_cfg = config.generation
-    temp = temperature if temperature is not None else gen_cfg.temperature
-    max_retries = max(1, int(gen_cfg.max_retries))
-    retry_delay = float(getattr(gen_cfg, "retry_delay_sec", 2.0) or 2.0)
-
-    primary_model = model_hint or gen_cfg.primary_model or gen_cfg.model
-    if not primary_model:
-        raise ValueError("No model configured (generation.primary_model or generation.model)")
-
-    models_to_try = [primary_model] + list(gen_cfg.fallback_models or [])
-
-    last_error: BaseException | None = None
-    for model in models_to_try:
-        provider = _get_provider_for_model(model, config)
-
-        for attempt in range(max_retries):
-            try:
-                response = _call_model(provider, model, prompt, system_prompt, temp)
-                logger.info("LLM response from %s/%s", provider, model)
+    Intelligent model selection with fallback and retry logic.
+    """
+    
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        genai.configure(api_key=api_key)
+        self.stats = {
+            "total_attempts": 0,
+            "successful_attempts": 0,
+            "failed_attempts": 0,
+            "model_usage": {}  # {model: count}
+        }
+    
+    def generate(
+        self,
+        task: str,  # "script", "tts", "image_gen"
+        prompt: str,
+        **kwargs
+    ) -> str:
+        """
+        Generate content with automatic fallback and retries.
+        
+        Args:
+            task: Type of generation (defines model priority)
+            prompt: The prompt to send to the model
+            **kwargs: Additional params (temperature, tools, etc)
+        
+        Returns:
+            Model response text
+        
+        Raises:
+            RuntimeError: If all models and retries exhausted
+        """
+        
+        models = MODELS.get(task)
+        if not models:
+            raise ValueError(f"Unknown task: {task}. Available: {list(MODELS.keys())}")
+        
+        primary_model = models["primary"]
+        fallback_model = models["fallback"]
+        
+        logger.info(f"\n🌖 Starting generation for task: {task}")
+        logger.info(f"   Primary: {primary_model}")
+        logger.info(f"   Fallback: {fallback_model}")
+        logger.info(f"   Retries: up to {MAX_RETRIES} per model")
+        
+        # Try each model
+        for model in [primary_model, fallback_model]:
+            if not model:
+                continue
+            
+            response = self._try_model(model, prompt, task, **kwargs)
+            if response:
                 return response
-
-            except ProviderCallError as e:
-                last_error = e
-
-                if e.status_code in {401, 403}:
-                    logger.warning("%s/%s: auth error, skipping model: %s", provider, model, e)
-                    break
-
-                if e.status_code == 429:
-                    if attempt < max_retries - 1:
-                        wait = retry_delay * (2**attempt)
-                        logger.warning("%s/%s: rate limited, retrying in %ss", provider, model, wait)
-                        time.sleep(wait)
-                        continue
-                    break
-
-                if attempt < max_retries - 1:
-                    wait = retry_delay * (2**attempt)
-                    logger.warning("%s/%s: error, retrying in %ss: %s", provider, model, wait, e)
-                    time.sleep(wait)
-                    continue
-
-            except (TimeoutError, ConnectionError) as e:
-                last_error = e
-                if attempt < max_retries - 1:
-                    wait = retry_delay * (2**attempt)
-                    logger.warning("%s/%s: connection error, retrying in %ss: %s", provider, model, wait, e)
-                    time.sleep(wait)
-                    continue
-
-        logger.info("Fallback: %s/%s failed, trying next", provider, model)
-
-    raise RuntimeError(f"All LLM models failed. Last error: {last_error}")
-
-
-def _get_provider_for_model(model: str, config: ProjectConfig) -> str:
-    model_l = model.lower()
-
-    if "gemini" in model_l:
-        return "gemini"
-
-    if "qwen" in model_l:
-        return "openrouter"
-
-    provider_priority = list(getattr(config.generation, "provider_priority", []) or [])
-    if provider_priority:
-        if ":" in model_l:
-            return "ollama"
-        return provider_priority[0]
-
-    return "ollama"
-
-
-def _call_model(provider: str, model: str, prompt: str, system: str | None, temp: float) -> str:
-    if provider == "gemini":
-        return _call_gemini(model, prompt, system, temp)
-    if provider == "ollama":
-        return _call_ollama(model, prompt, system, temp)
-    if provider == "openrouter":
-        return _call_openrouter(model, prompt, system, temp)
-
-    raise ValueError(f"Unknown provider: {provider}")
-
-
-def _call_gemini(model: str, prompt: str, system: str | None, temp: float) -> str:
-    try:
-        api_key = secrets_manager.get("GOOGLE_AI_API_KEY")
-    except KeyError as e:
-        raise ProviderCallError(str(e), status_code=401) from e
-
-    # Keep the import inside the function to avoid making Gemini dependency mandatory.
-    try:
-        import google.generativeai as genai  # type: ignore
-    except Exception as e:
-        raise ProviderCallError(
-            "google-generativeai is not installed (required for Gemini provider)",
-        ) from e
-
-    genai.configure(api_key=api_key)
-
-    try:
-        # Library supports both `gemini-...` and `models/gemini-...` naming.
-        model_name = model
-        if not model_name.startswith("models/") and not model_name.startswith("gemini"):
-            model_name = f"models/{model_name}"
-
-        if hasattr(genai, "GenerativeModel"):
-            m = genai.GenerativeModel(model_name)
-            kwargs: dict[str, Any] = {
-                "generation_config": {"temperature": temp},
-            }
-            if system:
-                kwargs["system_instruction"] = system
-            resp = m.generate_content(prompt, **kwargs)
-            text = getattr(resp, "text", None)
-            if not text:
-                raise ProviderCallError("Empty response from Gemini")
-            return text
-
-        raise ProviderCallError("Unsupported google.generativeai version")
-
-    except ProviderCallError:
-        raise
-    except Exception as e:
-        status_code = getattr(e, "status_code", None)
-        raise ProviderCallError(f"Gemini call failed: {e}", status_code=status_code) from e
-
-
-def _call_ollama(model: str, prompt: str, system: str | None, temp: float) -> str:
-    try:
-        import ollama  # type: ignore
-    except Exception as e:
-        raise ProviderCallError("ollama-python is not installed (required for Ollama provider)") from e
-
-    try:
-        response = ollama.generate(
-            model=model,
-            prompt=prompt,
-            system=system,
-            stream=False,
-            options={"temperature": temp},
+        
+        # All failed
+        error_msg = (
+            f"All models exhausted for task '{task}':\n"
+            f"  Primary: {primary_model} - {MAX_RETRIES} attempts\n"
+            f"  Fallback: {fallback_model} - {MAX_RETRIES} attempts\n"
+            f"Total attempts: {self.stats['total_attempts']}\n"
+            f"Successful: {self.stats['successful_attempts']}\n"
+            f"Failed: {self.stats['failed_attempts']}\n\n"
+            f"Model usage: {self.stats['model_usage']}"
         )
-        text = response.get("response") if isinstance(response, dict) else None
-        if not text:
-            raise ProviderCallError("Empty response from Ollama")
-        return text
-    except ProviderCallError:
-        raise
-    except Exception as e:
-        raise ProviderCallError(f"Ollama call failed: {e}") from e
+        logger.error(f"💩 {error_msg}")
+        raise RuntimeError(error_msg)
+    
+    def _try_model(
+        self,
+        model: str,
+        prompt: str,
+        task: str,
+        **kwargs
+    ) -> Optional[str]:
+        """
+        Try a specific model with retries.
+        """
+        
+        logger.info(f"\n🔄 Trying model: {model}")
+        
+        for attempt in range(1, MAX_RETRIES + 1):
+            self.stats["total_attempts"] += 1
+            self.stats["model_usage"][model] = self.stats["model_usage"].get(model, 0) + 1
+            
+            try:
+                logger.info(f"   Attempt {attempt}/{MAX_RETRIES}...")
+                
+                # Call the model
+                response = self._call_api(model, prompt, **kwargs)
+                
+                if not response or not response.text:
+                    logger.warning(f"   ❌ Empty response")
+                    continue
+                
+                logger.info(f"   ✅ Success! Got {len(response.text)} characters")
+                self.stats["successful_attempts"] += 1
+                return response.text
+            
+            except Exception as e:
+                self.stats["failed_attempts"] += 1
+                error_str = str(e)[:100]  # First 100 chars
+                logger.warning(f"   ❌ Attempt {attempt} failed: {error_str}")
+                
+                if attempt < MAX_RETRIES:
+                    # Calculate backoff: 2, 4, 8
+                    wait_time = min(
+                        BASE_RETRY_DELAY * (2 ** (attempt - 1)),
+                        MAX_RETRY_DELAY
+                    )
+                    logger.info(f"   ⏳ Waiting {wait_time}s before retry...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"   💩 Model {model} exhausted all {MAX_RETRIES} retries")
+        
+        return None
+    
+    def _call_api(
+        self,
+        model: str,
+        prompt: str,
+        **kwargs
+    ) -> Any:
+        """
+        Call Gemini API with specific model.
+        """
+        client = genai.GenerativeModel(model)
+        
+        # Log request (sanitized)
+        log_prompt = prompt[:150] + "..." if len(prompt) > 150 else prompt
+        logger.debug(f"   API Request: {log_prompt}")
+        
+        response = client.generate_content(prompt, **kwargs)
+        
+        return response
+    
+    def generate_json(
+        self,
+        task: str,
+        prompt: str,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Generate and parse JSON response.
+        Includes automatic JSON repair.
+        """
+        
+        response_text = self.generate(task, prompt, **kwargs)
+        
+        # Try to parse JSON
+        try:
+            # Handle markdown code blocks
+            if "```json" in response_text:
+                json_str = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                json_str = response_text.split("```")[1].split("```")[0].strip()
+            else:
+                json_str = response_text.strip()
+            
+            logger.debug(f"Parsing JSON: {json_str[:100]}...")
+            return json.loads(json_str)
+        
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON parsing failed: {e}. Attempting repair...")
+            
+            # Try to repair malformed JSON
+            try:
+                repair_prompt = f"""
+                Fix this malformed JSON and return ONLY the corrected JSON object:
+                {response_text[:500]}
+                
+                Rules:
+                - Remove trailing commas
+                - Fix unclosed brackets
+                - Escape unescaped quotes
+                - Return ONLY valid JSON, no markdown, no explanation
+                """
+                
+                repaired = self.generate(task, repair_prompt)
+                logger.debug(f"Repairing JSON: {repaired[:100]}...")
+                
+                if "```json" in repaired:
+                    json_str = repaired.split("```json")[1].split("```")[0].strip()
+                elif "```" in repaired:
+                    json_str = repaired.split("```")[1].split("```")[0].strip()
+                else:
+                    json_str = repaired.strip()
+                
+                result = json.loads(json_str)
+                logger.info("✅ JSON repaired successfully")
+                return result
+            
+            except Exception as repair_error:
+                logger.error(f"💩 JSON repair failed: {repair_error}")
+                raise RuntimeError(f"Failed to parse and repair JSON response: {e}")
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """
+        Return generation statistics.
+        """
+        return {
+            "total_attempts": self.stats["total_attempts"],
+            "successful": self.stats["successful_attempts"],
+            "failed": self.stats["failed_attempts"],
+            "success_rate": (
+                f"{self.stats['successful_attempts'] / max(1, self.stats['total_attempts']) * 100:.1f}%"
+                if self.stats["total_attempts"] > 0 else "N/A"
+            ),
+            "model_usage": self.stats["model_usage"]
+        }
 
 
-def _call_openrouter(model: str, prompt: str, system: str | None, temp: float) -> str:
-    try:
-        api_key = secrets_manager.get("OPENROUTER_API_KEY")
-    except KeyError as e:
-        raise ProviderCallError(str(e), status_code=401) from e
+# Singleton instance
+_router_instance: Optional[ModelRouter] = None
 
-    try:
-        import openai  # type: ignore
-    except Exception as e:
-        raise ProviderCallError("openai is not installed (required for OpenRouter provider)") from e
 
-    try:
-        client = openai.OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system or ""},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=temp,
-        )
-        return resp.choices[0].message.content or ""
-    except Exception as e:
-        status = getattr(e, "status_code", None)
-        if status is None:
-            status = getattr(getattr(e, "response", None), "status_code", None)
-        raise ProviderCallError(f"OpenRouter call failed: {e}", status_code=status) from e
+def get_router(api_key: str) -> ModelRouter:
+    """
+    Get or create the global ModelRouter instance.
+    """
+    global _router_instance
+    if _router_instance is None:
+        _router_instance = ModelRouter(api_key)
+    return _router_instance
+
+
+def reset_router():
+    """
+    Reset the global router (useful for testing).
+    """
+    global _router_instance
+    _router_instance = None
+
+
+# Example usage
+if __name__ == "__main__":
+    import os
+    
+    # Setup logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(message)s"
+    )
+    
+    # Example
+    api_key = os.getenv("GOOGLE_AI_API_KEY")
+    if not api_key:
+        print("💳 Set GOOGLE_AI_API_KEY environment variable")
+        exit(1)
+    
+    router = get_router(api_key)
+    
+    # Generate a script
+    result = router.generate_json(
+        task="script",
+        prompt="""
+        Generate a 2-minute horoscope script for Aries in JSON format:
+        {
+            "sign": "Aries",
+            "date": "2025-12-13",
+            "script": "[the actual horoscope text here, min 300 chars]",
+            "cta": "engagement call to action"
+        }
+        """
+    )
+    
+    print("\n✅ Result:")
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    
+    print("\n📊 Stats:")
+    print(json.dumps(router.get_stats(), indent=2))
