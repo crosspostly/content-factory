@@ -73,7 +73,7 @@ jobs:
           echo "📆 Date: $DATE"
           echo "📦 Project: $PROJECT"
       
-      - name: Generate Content (Script → TTS → Video)
+      - name: Generate Content (Script → TTS → Video with ModelRouter)
         id: generate
         env:
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
@@ -87,30 +87,70 @@ jobs:
           import sys
           from pathlib import Path
           
-          project = os.getenv('PROJECT')
+          # Add current dir to path to import core modules
+          sys.path.insert(0, '.')
+          
+          project_name = os.getenv('PROJECT')
           fmt = os.getenv('FORMAT')
           target_date = os.getenv('DATE')
+          api_key = os.getenv('GOOGLE_AI_API_KEY')
+          
+          if not api_key:
+              print("❌ Error: GOOGLE_AI_API_KEY not set")
+              sys.exit(1)
           
           print(f"\n" + "="*70)
           print(f"🎬 HOROSCOPE VIDEO GENERATION")
           print(f"="*70)
-          print(f"Project: {project}")
+          print(f"Project: {project_name}")
           print(f"Format: {fmt}")
           print(f"Date: {target_date}\n")
           
+          # ========== LOAD CONFIG =========="
+          print(f"⚡ Loading configuration...")
+          try:
+              from core.utils.config_loader import ProjectConfig
+              config_path = f"projects/{project_name}/config.yaml"
+              config = ProjectConfig.load(config_path)
+              print(f"✅ Config loaded: {config_path}")
+          except Exception as e:
+              print(f"❌ Config loading failed: {e}")
+              # Fallback config if file missing (for testing)
+              from core.utils.config_loader import ProjectConfig
+              config = ProjectConfig(
+                  name=project_name, 
+                  description="Fallback", 
+                  content_type=fmt,
+                  platforms=["youtube"]
+              )
+              print(f"⚠️ Using fallback config")
+
           # ========== PART 1: SCRIPT GENERATION =========="
-          print(f"📝 PART 1: Script Generation")
+          print(f"\n📝 PART 1: Script Generation (with ModelRouter)")
           print(f"-" * 70)
           
           try:
               from core.generators import script_generator
               
+              # UPDATED CALL: Passing config and api_key
               if fmt == "shorts":
-                  script = script_generator.generate_short(target_date=target_date)
+                  script = script_generator.generate_short(
+                      config=config, 
+                      target_date=target_date, 
+                      api_key=api_key
+                  )
               elif fmt == "long_form":
-                  script = script_generator.generate_long_form(target_date=target_date)
+                  script = script_generator.generate_long_form(
+                      config=config, 
+                      target_date=target_date, 
+                      api_key=api_key
+                  )
               elif fmt == "ad":
-                  script = script_generator.generate_ad(target_date=target_date)
+                  script = script_generator.generate_ad(
+                      config=config, 
+                      target_date=target_date, 
+                      api_key=api_key
+                  )
               else:
                   raise ValueError(f"Unknown format: {fmt}")
               
@@ -130,10 +170,6 @@ jobs:
           
           try:
               from core.generators import tts_generator
-              
-              api_key = os.getenv('GOOGLE_AI_API_KEY')
-              if not api_key:
-                  raise ValueError("GOOGLE_AI_API_KEY not set!")
               
               audio_map = tts_generator.synthesize(
                   script=script,
