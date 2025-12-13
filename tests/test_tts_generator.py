@@ -11,6 +11,12 @@ import pytest
 from core.generators import tts_generator
 from core.utils.config_loader import ProjectConfig, ConfigNode
 
+# Mock google.genai to prevent import errors
+import sys
+if 'google.genai' not in sys.modules:
+    sys.modules['google'] = MagicMock()
+    sys.modules['google.genai'] = MagicMock()
+
 # ============ FIXTURES ============
 
 @pytest.fixture
