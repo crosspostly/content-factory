@@ -4,7 +4,7 @@ When GitHub Actions workflows fail, this module:
 1. Analyzes error logs using Qwen (primary) or Gemini (fallback)
 2. Identifies the problem and root cause
 3. Generates code fixes when possible
-4. Creates GitHub Issues with detailed analysis
+4. Creates GitHub Issues with detailed technical specs
 5. Creates PRs with automatic fixes
 """
 
@@ -45,6 +45,7 @@ def analyze_workflow_error(
         - code_fix: Fixed code (or empty string)
         - solution_steps: Manual steps if auto-fix not possible
         - suggested_commit_message: Git commit message
+        - technical_notes: Detailed technical analysis
     """
 
     # Use only recent logs (most relevant)
@@ -53,7 +54,7 @@ def analyze_workflow_error(
     prompt = f"""You are an expert DevOps engineer and Python developer.
 You specialize in the Content Factory project - an AI-powered video generation system.
 
-A GitHub Actions workflow failed. Analyze the error and provide a technical solution.
+A GitHub Actions workflow failed. Analyze the error and provide a comprehensive technical solution.
 
 **Project:** {project_name}
 **Workflow:** {workflow_name}
@@ -63,27 +64,30 @@ A GitHub Actions workflow failed. Analyze the error and provide a technical solu
 {recent_logs}
 ```
 
-Analyze this error and respond with ONLY a valid JSON object (no markdown, no explanations):
+Analyze this error DEEPLY and respond with ONLY a valid JSON object (no markdown, no explanations):
 
 {{
-  "problem": "Brief description of what failed (1-2 sentences)",
-  "root_cause": "Why it happened and detailed explanation",
+  "problem": "Brief clear description of what failed (1-2 sentences)",
+  "root_cause": "Detailed analysis: WHY it failed, what went wrong, which line/component",
   "severity": "critical|high|medium|low",
-  "solution_steps": ["Step 1", "Step 2", "Step 3"],
+  "technical_notes": "Detailed technical explanation for developers. Include: error type, affected components, patterns of failure, what was expected vs what happened",
+  "solution_steps": ["Step 1: exact action", "Step 2: code changes needed", "Step 3: verification"],
+  "files_to_check": ["path/to/file1.py", "path/to/file2.yaml"],
   "auto_fix_possible": true or false,
   "file_to_modify": "path/to/file or null",
   "code_fix": "Complete corrected code or empty string",
-  "suggested_commit_message": "Brief git commit message"
+  "suggested_commit_message": "Brief git commit message",
+  "testing_instructions": "How to verify the fix works (run these commands/tests)"
 }}
 
-Be precise and actionable. Only return JSON.
+Be VERY detailed and precise. Only return JSON.
 """
 
     try:
         response = generate_text(config, prompt)
 
         # Extract JSON from response
-        match = re.search(r"\{[\s\S]*\}", response)
+        match = re.search(r"\{{[\s\S]*\}}", response)
         if not match:
             logger.error("No JSON found in LLM response")
             return _default_analysis("Could not parse LLM response")
@@ -108,13 +112,16 @@ def _normalize_analysis(analysis: dict) -> dict:
 
     return {
         "problem": analysis.get("problem", "Unknown error")[:200],
-        "root_cause": analysis.get("root_cause", "Unknown")[:500],
+        "root_cause": analysis.get("root_cause", "Unknown")[:800],
+        "technical_notes": analysis.get("technical_notes", "")[:2000],
         "severity": _validate_severity(analysis.get("severity", "medium")),
-        "solution_steps": analysis.get("solution_steps", [])[:10],
+        "solution_steps": analysis.get("solution_steps", [])[:15],
+        "files_to_check": analysis.get("files_to_check", [])[:10],
         "auto_fix_possible": bool(analysis.get("auto_fix_possible", False)),
         "file_to_modify": analysis.get("file_to_modify"),
         "code_fix": analysis.get("code_fix", "")[:5000],
         "suggested_commit_message": analysis.get("suggested_commit_message", "fix: auto-fix")[:100],
+        "testing_instructions": analysis.get("testing_instructions", "")[:1000],
     }
 
 
@@ -129,16 +136,19 @@ def _default_analysis(error: str) -> dict:
     return {
         "problem": f"Auto-Fix analysis failed: {error}",
         "root_cause": "Qwen/Gemini analysis could not complete",
+        "technical_notes": "Manual review required",
         "severity": "high",
         "solution_steps": [
             "Check the error logs manually",
             "Review the workflow output for details",
             "Contact the project maintainer if needed",
         ],
+        "files_to_check": [],
         "auto_fix_possible": False,
         "file_to_modify": None,
         "code_fix": "",
         "suggested_commit_message": "fix: manual fix required",
+        "testing_instructions": "Run: pytest tests/ -v",
     }
 
 
@@ -181,7 +191,7 @@ def create_issue(
     workflow_run_number: str,
     analysis: dict,
 ) -> Optional[str]:
-    """Create GitHub Issue with error analysis.
+    """Create GitHub Issue with detailed technical task description.
 
     Args:
         project_name: Project identifier
@@ -195,27 +205,76 @@ def create_issue(
 
     title = f"[{project_name}] 🔴 [{analysis['severity'].upper()}] {analysis['problem'][:60]}"
 
-    body = f"""## 🚨 Workflow Failure Analysis
+    # Build comprehensive issue body
+    body = f"""## 🚨 Workflow Failure - Technical Task
 
-**Project:** {project_name}
-**Run:** #{workflow_run_number}
 **Severity:** {analysis['severity'].upper()}
-
-### Problem
-{analysis['problem']}
-
-### Root Cause
-{analysis['root_cause']}
-
-### Solution Steps
-{_format_steps(analysis.get('solution_steps', []))}
-
-### Auto-Fix Status
-- Can be auto-fixed: {'✅ Yes' if analysis['auto_fix_possible'] else '❌ No (manual fix needed)'}
+**Project:** {project_name}
+**Workflow Run:** #{workflow_run_number}
 
 ---
-*Generated by Auto-Fix Agent 🤖 at GitHub Actions*
-[View Workflow Run](https://github.com/crosspostly/content-factory/actions/runs/{workflow_id})
+
+## 📋 Problem Statement
+
+{analysis['problem']}
+
+---
+
+## 🔍 Root Cause Analysis
+
+{analysis['root_cause']}
+
+---
+
+## 📌 Technical Details
+
+{analysis['technical_notes']}
+
+### Files Involved
+"""
+
+    if analysis.get('files_to_check'):
+        for file_path in analysis['files_to_check']:
+            body += f"\n- `{file_path}`"
+    else:
+        body += "\n- Check logs for affected files"
+
+    body += f"""\n\n---
+
+## ✅ Solution: Task Description
+
+"""
+
+    if analysis['auto_fix_possible']:
+        body += "**Auto-Fix Available:** Yes ✅\n\n"
+        body += "An automated PR has been created with the suggested fix.\n"
+        body += "Review the PR and merge if the fix looks correct.\n\n"
+    else:
+        body += "**Manual Fix Required:** This needs manual attention\n\n"
+
+    body += "### Steps to Fix\n\n"
+    for i, step in enumerate(analysis.get('solution_steps', []), 1):
+        body += f"{i}. {step}\n"
+
+    body += f"""\n### Testing Instructions
+
+```bash
+{analysis.get('testing_instructions', 'pytest tests/ -v')}
+```
+
+---
+
+## 📝 Notes for Developer
+
+- Make sure to run the testing instructions before creating a PR
+- Follow the solution steps in order
+- Reference this issue in your PR: `Fixes #{workflow_run_number}`
+- Auto-Fix Agent will verify the fix works ✅
+
+---
+
+*Generated by Auto-Fix Agent 🤖*
+*[View Workflow Run](https://github.com/crosspostly/content-factory/actions/runs/{workflow_id})*
 """
 
     try:
@@ -277,17 +336,22 @@ def create_pr(
 ### Problem
 {analysis['problem']}
 
-### Solution
+### Solution Implemented
 {analysis['root_cause']}
 
+### Changes
+See diff below for code changes.
+
 ### How to Review
-1. Check the diff below to understand the fix
-2. Verify it solves the issue mentioned above
-3. Merge if approved, or request changes
+1. Check the diff to understand the fix
+2. Verify it solves the issue
+3. Run: `{analysis.get('testing_instructions', 'pytest tests/ -v')}`
+4. Merge if approved
 
 ---
 *Created by Auto-Fix Agent 🤖*
-*This PR was automatically generated to fix a workflow failure*
+*Auto-generated to fix workflow failure*
+*Close this PR if the fix is incorrect - will create a new analysis*
 """
 
     try:
@@ -324,10 +388,3 @@ def create_pr(
     except Exception as e:
         logger.error(f"Exception creating PR: {e}")
         return None
-
-
-def _format_steps(steps: list) -> str:
-    """Format solution steps as markdown list."""
-    if not steps:
-        return "- No specific steps provided"
-    return "\n".join(f"- {step}" for step in steps)
