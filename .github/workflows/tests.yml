@@ -24,6 +24,7 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
       
       - name: Cache apt packages
         uses: awalsh128/cache-apt-pkgs-action@latest
@@ -41,7 +42,8 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --prefer-binary -r requirements.txt -q
+          echo "✅ Python dependencies installed"
       
       - name: Check Environment
         env:
@@ -97,8 +99,8 @@ jobs:
       
       - name: Tests Summary
         if: success()
-        run: echo "Tests completed successfully!"
+        run: echo "✅ Tests completed successfully!"
       
       - name: Tests Had Issues
         if: failure()
-        run: echo "Some tests failed. Check logs above."
+        run: echo "❌ Some tests failed. Check logs above."
