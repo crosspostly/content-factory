@@ -15,7 +15,7 @@ import re
 import subprocess
 from typing import Optional
 
-from core.utils.model_router import generate_text
+from core.utils.model_router import get_router
 from core.utils.config_loader import ProjectConfig
 
 logger = logging.getLogger(__name__)
@@ -84,10 +84,17 @@ Be VERY detailed and precise. Only return JSON.
 """
 
     try:
-        response = generate_text(config, prompt)
+        # Get API key from environment
+        api_key = os.environ.get("GOOGLE_AI_API_KEY")
+        if not api_key:
+            logger.error("GOOGLE_AI_API_KEY not found in environment")
+            return _default_analysis("Missing GOOGLE_AI_API_KEY")
+
+        router = get_router(api_key)
+        response = router.generate(task="error_analysis", prompt=prompt)
 
         # Extract JSON from response
-        match = re.search(r"\{{[\s\S]*\}}", response)
+        match = re.search(r"\{[\s\S]*\}", response)
         if not match:
             logger.error("No JSON found in LLM response")
             return _default_analysis("Could not parse LLM response")
