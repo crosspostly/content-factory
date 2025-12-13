@@ -67,11 +67,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install google-generativeai pyyaml requests
       
+      - name: Download test logs
+        if: steps.check-duplicate.outputs.skip != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: test-outputs-${{ github.event.workflow_run.run_number }}
+          path: ./logs
+        continue-on-error: true
+      
       - name: Run Auto-Fix Agent
         if: steps.check-duplicate.outputs.skip != 'true'
         id: auto-fix
         env:
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 << 'PYTHON_SCRIPT'
@@ -80,7 +89,8 @@ jobs:
           sys.path.insert(0, '.')
           
           try:
-              from core.auto_fix_agent import analyze_workflow_error, create_github_issue
+              from core.auto_fix_agent import analyze_workflow_error, create_github_issue, classify_error_complexity
+              from core.utils.config_loader import ProjectConfig
           except ImportError as e:
               print(f"⚠️  Could not import auto_fix_agent: {e}")
               sys.exit(0)
@@ -91,33 +101,67 @@ jobs:
           run_number = "${{ steps.failure-info.outputs.run_number }}"
           branch_name = "${{ steps.failure-info.outputs.branch_name }}"
           
-          # Create a simple error message from context
-          error_logs = f"""
-          Workflow: {workflow_name}
-          Run ID: {workflow_id}
-          Branch: {branch_name}
-          Status: Failed
-          
-          Check GitHub Actions logs for details:
-          https://github.com/${{ github.repository }}/actions/runs/{workflow_id}
-          """
+          # Try to load error logs from artifact
+          error_logs = ""
+          try:
+              with open('logs/pytest.log', 'r') as f:
+                  error_logs = f.read()
+              print(f"📄 Loaded pytest logs ({len(error_logs)} chars)")
+          except Exception as e:
+              print(f"⚠️  Could not load pytest.log: {e}")
+              error_logs = f"""
+              Workflow: {workflow_name}
+              Run ID: {workflow_id}
+              Branch: {branch_name}
+              Status: Failed
+              
+              Check GitHub Actions logs for details:
+              https://github.com/${{ github.repository }}/actions/runs/{workflow_id}
+              """
           
           print(f"🔍 Analyzing workflow failure on branch: {branch_name}")
           print(f"🌖 Sending to Qwen/Gemini for analysis...")
           
           try:
+              # Load config for model routing
+              try:
+                  config = ProjectConfig.load('projects/youtube_horoscope/config.yaml')
+              except:
+                  # Use default config
+                  config = ProjectConfig({
+                      'generation': {
+                          'primary_model': 'gemini-2.5-flash',
+                          'fallback_models': ['gemini-2.5-pro'],
+                          'temperature': 0.7,
+                          'max_retries': 2
+                      }
+                  })
+              
               # Analyze the error
               analysis = analyze_workflow_error(
                   project_name,
                   workflow_name,
                   error_logs,
-                  config=None
+                  config=config
               )
               
               print(f"✅ Analysis complete")
               print(f"   Problem: {analysis.get('problem', 'Unknown')}")
               print(f"   Severity: {analysis.get('severity', 'unknown')}")
               print(f"   Auto-fix possible: {analysis.get('auto_fix_possible', False)}")
+              
+              # Classify complexity
+              complexity = classify_error_complexity(analysis)
+              print(f"   Complexity: {complexity}")
+              
+              # Save complexity for next steps
+              with open('/tmp/complexity.txt', 'w') as f:
+                  f.write(complexity)
+              
+              # Save analysis JSON
+              import json
+              with open('/tmp/analysis.json', 'w') as f:
+                  json.dump(analysis, f, indent=2)
               
               # Create GitHub Issue with analysis
               issue_url = create_github_issue(
@@ -131,6 +175,11 @@ jobs:
                   print(f"📋 Issue created: {issue_url}")
                   with open('/tmp/issue_url.txt', 'w') as f:
                       f.write(issue_url)
+                  
+                  # Extract issue number from URL
+                  issue_number = issue_url.split('/')[-1]
+                  with open('/tmp/issue_number.txt', 'w') as f:
+                      f.write(issue_number)
               else:
                   print(f"⚠️  Could not create issue")
                   
@@ -140,6 +189,25 @@ jobs:
               traceback.print_exc()
           
           PYTHON_SCRIPT
+        continue-on-error: true
+      
+      - name: Add labels to issue based on complexity
+        if: always() && steps.check-duplicate.outputs.skip != 'true'
+        run: |
+          if [ -f /tmp/issue_number.txt ] && [ -f /tmp/complexity.txt ]; then
+            ISSUE_NUM=$(cat /tmp/issue_number.txt)
+            COMPLEXITY=$(cat /tmp/complexity.txt)
+            
+            if [ "$COMPLEXITY" = "SIMPLE" ]; then
+              echo "🤖 Marking issue as auto-fix-ready"
+              gh issue edit $ISSUE_NUM --add-label "auto-fix-ready"
+            else
+              echo "👤 Marking issue as needs-dev-task"
+              gh issue edit $ISSUE_NUM --add-label "needs-dev-task"
+            fi
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
         continue-on-error: true
       
       - name: Comment on PR

@@ -1,0 +1,238 @@
+name: Auto-Fix (Simple Errors)
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  apply-fix:
+    name: Apply Auto-Fix
+    runs-on: ubuntu-latest
+    # Only run if issue has 'auto-fix-ready' label
+    if: github.event.label.name == 'auto-fix-ready'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt black
+      
+      - name: Extract analysis from issue
+        id: extract
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body;
+            
+            // Try to extract file path and analysis
+            // Parse issue body for structured data
+            const fileMatch = body.match(/`([^`]+\.py)`/);
+            const file = fileMatch ? fileMatch[1] : null;
+            
+            core.setOutput('issue_number', issue.number);
+            core.setOutput('issue_title', issue.title);
+            core.setOutput('file_path', file || '');
+            
+            return { issue_number: issue.number, file_path: file };
+      
+      - name: Apply auto-fix
+        id: apply-fix
+        env:
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 << 'PYTHON_SCRIPT'
+          import sys
+          import os
+          import json
+          sys.path.insert(0, '.')
+          
+          try:
+              from core.auto_fix_agent import apply_auto_fix
+              from core.utils.config_loader import ProjectConfig
+          except ImportError as e:
+              print(f"⚠️  Could not import modules: {e}")
+              sys.exit(1)
+          
+          issue_number = "${{ steps.extract.outputs.issue_number }}"
+          branch_name = f"auto-fix-issue-{issue_number}"
+          
+          print(f"🔧 Applying auto-fix for issue #{issue_number}")
+          print(f"🌿 Creating branch: {branch_name}")
+          
+          # Get issue body to extract analysis
+          import subprocess
+          result = subprocess.run(
+              ['gh', 'issue', 'view', issue_number, '--json', 'body'],
+              capture_output=True,
+              text=True,
+              timeout=10,
+          )
+          
+          if result.returncode != 0:
+              print(f"❌ Failed to fetch issue: {result.stderr}")
+              sys.exit(1)
+          
+          issue_data = json.loads(result.stdout)
+          issue_body = issue_data.get('body', '')
+          
+          # Try to load config
+          try:
+              config = ProjectConfig.load('projects/youtube_horoscope/config.yaml')
+          except:
+              config = ProjectConfig({
+                  'generation': {
+                      'primary_model': 'gemini-2.5-flash',
+                      'fallback_models': ['gemini-2.5-pro'],
+                      'temperature': 0.7,
+                      'max_retries': 2
+                  }
+              })
+          
+          # For now, we'll use LLM to generate fix from issue body
+          # In production, we'd store analysis in issue metadata
+          from core.utils.model_router import generate_text
+          
+          prompt = f"""You are an expert Python developer fixing bugs.
+          
+          Read this GitHub Issue describing a test failure:
+          
+          {issue_body}
+          
+          Generate a JSON response with the fix:
+          {{
+            "file_to_modify": "path/to/file.py",
+            "code_fix": "complete fixed file content",
+            "suggested_commit_message": "fix: description"
+          }}
+          
+          Return ONLY valid JSON, no markdown."""
+          
+          try:
+              response = generate_text(config, prompt)
+              
+              # Extract JSON
+              import re
+              match = re.search(r'\{[\s\S]*\}', response)
+              if not match:
+                  print(f"❌ No JSON found in LLM response")
+                  sys.exit(1)
+              
+              analysis = json.loads(match.group())
+              
+              # Validate required fields
+              if not analysis.get('file_to_modify') or not analysis.get('code_fix'):
+                  print(f"❌ Missing file_to_modify or code_fix in analysis")
+                  sys.exit(1)
+              
+              print(f"✅ Generated fix for: {analysis['file_to_modify']}")
+              
+              # Apply fix
+              success = apply_auto_fix(
+                  analysis,
+                  branch_name,
+                  commit_message=f"🤖 auto-fix: issue #{issue_number}"
+              )
+              
+              if success:
+                  print(f"✅ Fix applied and pushed to {branch_name}")
+                  with open('/tmp/branch_name.txt', 'w') as f:
+                      f.write(branch_name)
+                  with open('/tmp/success.txt', 'w') as f:
+                      f.write('true')
+              else:
+                  print(f"❌ Failed to apply fix")
+                  sys.exit(1)
+                  
+          except Exception as e:
+              print(f"❌ Auto-fix failed: {e}")
+              import traceback
+              traceback.print_exc()
+              sys.exit(1)
+          
+          PYTHON_SCRIPT
+        continue-on-error: true
+      
+      - name: Create Pull Request
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            if (!fs.existsSync('/tmp/success.txt')) {
+              console.log('⚠️  Fix was not applied successfully');
+              return;
+            }
+            
+            const branchName = fs.readFileSync('/tmp/branch_name.txt', 'utf8').trim();
+            const issueNumber = ${{ steps.extract.outputs.issue_number }};
+            
+            try {
+              const { data: pr } = await github.rest.pulls.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🤖 Auto-Fix: Issue #${issueNumber}`,
+                head: branchName,
+                base: 'main',
+                body: `## Auto-Fix PR\n\nFixes #${issueNumber}\n\n**This PR was automatically generated by Auto-Fix Agent.**\n\n### Review Instructions\n1. Check the code changes\n2. Verify tests pass\n3. Merge if approved\n\n---\n*Generated by Auto-Fix Agent 🤖*`
+              });
+              
+              console.log(`✅ Created PR: ${pr.html_url}`);
+              
+              // Add comment to issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: `🤖 **Auto-Fix PR Created:** ${pr.html_url}\n\nPlease review and merge if the fix looks correct.`
+              });
+              
+            } catch (error) {
+              console.error(`❌ Failed to create PR: ${error.message}`);
+            }
+      
+      - name: Comment on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.extract.outputs.issue_number }},
+              body: `❌ **Auto-Fix Failed**\n\nCould not automatically fix this issue. Manual intervention required.\n\nRemoving \`auto-fix-ready\` label and adding \`needs-dev-task\`.`
+            });
+            
+            // Remove auto-fix-ready label
+            await github.rest.issues.removeLabel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.extract.outputs.issue_number }},
+              name: 'auto-fix-ready'
+            }).catch(() => {});
+            
+            // Add needs-dev-task label
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.extract.outputs.issue_number }},
+              labels: ['needs-dev-task']
+            });
