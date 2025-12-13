@@ -123,7 +123,7 @@ jobs:
                           pass
               
               # Шаг 3: Запрос к Gemini
-              print("🤖 Calling Gemini 2.0 Flash for analysis...")
+              print("🤖 Calling Gemini 2.5 Flash for analysis...")
               
               prompt = f"""
 You are debugging Python test failures. Attempt {attempt}/{MAX_ATTEMPTS}.
@@ -160,7 +160,7 @@ Be aggressive. Fix everything you can identify.
 """
               
               try:
-                  model = genai.GenerativeModel('gemini-2.0-flash-exp')
+                  model = genai.GenerativeModel('gemini-2.5-flash')
                   response = model.generate_content(prompt)
                   
                   with open(f'gemini_analysis_attempt_{attempt}.md', 'w') as f:
@@ -271,7 +271,7 @@ Be aggressive. Fix everything you can identify.
               
               execSync(`git checkout -b ${branchName}`);
               execSync('git add -A');
-              execSync('git commit -m "🤖 Auto-fix: Gemini 2.0 Flash resolved test failures\n\nApplied fixes after iterative analysis and testing."');
+              execSync('git commit -m "🤖 Auto-fix: Gemini 2.5 Flash resolved test failures\n\nApplied fixes after iterative analysis and testing."');
               execSync(`git push origin ${branchName}`);
               
               // Читаем все анализы
@@ -286,10 +286,10 @@ Be aggressive. Fix everything you can identify.
               const pr = await github.rest.pulls.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: '✅ [AUTO-FIX] Tests fixed by Gemini 2.0 Flash',
+                title: '✅ [AUTO-FIX] Tests fixed by Gemini 2.5 Flash',
                 head: branchName,
                 base: '${{ github.event.workflow_run.head_branch }}',
-                body: `## 🎉 Automated Fix Success\n\n**Gemini 2.0 Flash** successfully analyzed and fixed the failing tests through iterative debugging.\n\n### Analysis History\n${allAnalysis.slice(0, 5000)}\n\n---\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Fixed by:** Gemini Auto-Fix Workflow`,
+                body: `## 🎉 Automated Fix Success\n\n**Gemini 2.5 Flash** successfully analyzed and fixed the failing tests through iterative debugging.\n\n### Analysis History\n${allAnalysis.slice(0, 5000)}\n\n---\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Fixed by:** Gemini Auto-Fix Workflow`,
                 labels: ['✅ auto-fix', '🤖 ai-generated']
               });
               
@@ -325,7 +325,7 @@ Be aggressive. Fix everything you can identify.
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `🧊 [FROZEN] Auto-fix failed after 10 attempts - Manual intervention required`,
-              body: `## 🔴 Gemini Auto-Fix Failed\n\nAfter 10 iterative attempts, Gemini 2.0 Flash could not automatically resolve the test failures.\n\n### All Attempts\n${allAnalysis.slice(0, 10000)}\n\n---\n\n### Manual Action Required\n👀 Review the analysis above and apply fixes manually.\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Workflow:** ${{ github.event.workflow_run.name }}\n**Branch:** ${{ github.event.workflow_run.head_branch }}`,
+              body: `## 🔴 Gemini Auto-Fix Failed\n\nAfter 10 iterative attempts, Gemini 2.5 Flash could not automatically resolve the test failures.\n\n### All Attempts\n${allAnalysis.slice(0, 10000)}\n\n---\n\n### Manual Action Required\n👀 Review the analysis above and apply fixes manually.\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Workflow:** ${{ github.event.workflow_run.name }}\n**Branch:** ${{ github.event.workflow_run.head_branch }}`,
               labels: ['🧊 frozen', '🔴 manual-fix', 'bug', 'help wanted'],
               assignees: ['${{ github.event.workflow_run.actor }}']
             });
