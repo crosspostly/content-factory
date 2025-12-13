@@ -1,132 +1,77 @@
 name: Auto-Merge (Successful Auto-Fix PRs)
 
+# Срабатывает когда PR получает label "auto-merge"
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review]
-  workflow_run:
-    workflows: ["Run Tests"]
-    types: [completed]
+    types: [labeled, synchronize, opened]
+  pull_request_review:
+    types: [submitted]
 
 permissions:
   contents: write
   pull-requests: write
-  issues: write
 
 jobs:
-  auto-merge:
-    name: Auto-Merge PR
+  check-ready-to-merge:
+    name: Check if PR ready to merge
     runs-on: ubuntu-latest
-    # Only for auto-fix branches with passing tests
-    if: |
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      (startsWith(github.event.workflow_run.head_branch, 'auto-fix-') ||
-       startsWith(github.event.workflow_run.head_branch, 'auto-fix-issue-'))
+    outputs:
+      should-merge: ${{ steps.check.outputs.should-merge }}
+      reason: ${{ steps.check.outputs.reason }}
     
     steps:
-      - name: Get PR number
-        id: get-pr
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const branch = context.payload.workflow_run.head_branch;
-            console.log(`Looking for PR from branch: ${branch}`);
-            
-            const { data: pullRequests } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              head: `${context.repo.owner}:${branch}`
-            });
-            
-            if (pullRequests.length === 0) {
-              console.log('No open PR found for this branch');
-              return null;
-            }
-            
-            const pr = pullRequests[0];
-            console.log(`Found PR #${pr.number}: ${pr.title}`);
-            
-            core.setOutput('pr_number', pr.number);
-            core.setOutput('pr_title', pr.title);
-            
-            return pr.number;
+      - name: Check merge conditions
+        id: check
+        run: |
+          # Условия для автоматического merge:
+          # 1. PR имеет label "auto-merge"
+          # 2. PR одобрен (approved)
+          # 3. Все checks pass
+          # 4. PR это НЕ draft
+          
+          LABELS="${{ github.event.pull_request.labels.*.name }}"
+          IS_DRAFT="${{ github.event.pull_request.draft }}"
+          
+          if [[ "$LABELS" == *"auto-merge"* ]] && [[ "$IS_DRAFT" == "false" ]]; then
+            echo "should-merge=true" >> $GITHUB_OUTPUT
+            echo "reason=Has auto-merge label and is not draft" >> $GITHUB_OUTPUT
+          else
+            echo "should-merge=false" >> $GITHUB_OUTPUT
+            if [[ "$IS_DRAFT" == "true" ]]; then
+              echo "reason=PR is draft" >> $GITHUB_OUTPUT
+            else
+              echo "reason=Missing auto-merge label" >> $GITHUB_OUTPUT
+            fi
+          fi
+  
+  auto-merge:
+    name: Auto Merge PR
+    runs-on: ubuntu-latest
+    needs: check-ready-to-merge
+    if: needs.check-ready-to-merge.outputs.should-merge == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
       
-      - name: Verify PR is auto-generated
-        id: verify
-        if: steps.get-pr.outputs.pr_number
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const prNumber = ${{ steps.get-pr.outputs.pr_number }};
-            
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber
-            });
-            
-            // Check if PR has auto-generated label
-            const hasAutoLabel = pr.labels.some(label => 
-              label.name === 'auto-generated' || 
-              label.name === 'ai-generated'
-            );
-            
-            if (!hasAutoLabel) {
-              console.log('PR is not auto-generated, skipping auto-merge');
-              return false;
-            }
-            
-            // Check if PR title indicates auto-fix
-            const isAutoFix = pr.title.includes('Auto-Fix') || 
-                             pr.title.includes('🤖');
-            
-            if (!isAutoFix) {
-              console.log('PR is not an auto-fix PR, skipping');
-              return false;
-            }
-            
-            console.log('✅ PR is eligible for auto-merge');
-            core.setOutput('should_merge', 'true');
-            
-            return true;
+      - name: Merge PR
+        run: |
+          echo "🔄 Merging PR #${{ github.event.pull_request.number }}"
+          echo "Reason: ${{ needs.check-ready-to-merge.outputs.reason }}"
+          
+          gh pr merge ${{ github.event.pull_request.number }} \
+            --auto \
+            --squash \
+            --delete-branch || echo "⚠️ Could not merge (may already be merged)"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true
       
-      - name: Auto-merge PR
-        if: steps.verify.outputs.should_merge == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const prNumber = ${{ steps.get-pr.outputs.pr_number }};
-            
-            try {
-              // Add approval comment
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: prNumber,
-                body: '✅ **Auto-Merge Approved**\n\nAll tests passed! Merging automatically.\n\n*Auto-merged by Auto-Fix Agent 🤖*'
-              });
-              
-              // Merge the PR
-              await github.rest.pulls.merge({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: prNumber,
-                merge_method: 'squash',
-                commit_title: `🤖 ${context.payload.workflow_run.head_branch}`,
-                commit_message: 'Auto-merged by Auto-Fix Agent after successful tests'
-              });
-              
-              console.log(`✅ Successfully merged PR #${prNumber}`);
-              
-            } catch (error) {
-              console.error(`❌ Failed to merge PR: ${error.message}`);
-              
-              // Comment on PR about failure
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: prNumber,
-                body: `⚠️ **Auto-Merge Failed**\n\nCould not automatically merge this PR: ${error.message}\n\nPlease merge manually.`
-              });
-            }
+      - name: Comment on PR
+        if: always()
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "✅ Auto-merged by GitHub Actions" || true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true

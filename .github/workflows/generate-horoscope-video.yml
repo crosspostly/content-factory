@@ -1,6 +1,5 @@
 name: Generate Horoscope Video
 
-# Запуск: вручную через Actions или по расписанию
 on:
   workflow_dispatch:
     inputs:
@@ -23,9 +22,8 @@ on:
         default: 'youtube_horoscope'
         type: string
   
-  # По расписанию: каждый день в 06:00 UTC (09:00 MSK) для shorts
   schedule:
-    - cron: '0 6 * * *'
+    - cron: '0 6 * * *'  # Daily 06:00 UTC = 09:00 MSK
 
 jobs:
   generate-video:
@@ -44,52 +42,38 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
       
-      - name: Cache system dependencies
-        uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: ffmpeg imagemagick ghostscript fonts-dejavu-core libsm6 libxext6
-          version: 1.0
-      
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg imagemagick ghostscript fonts-dejavu-core libsm6 libxext6
-          echo "✅ FFmpeg: $(ffmpeg -version | head -1)"
-          echo "✅ Python: $(python --version)"
+          echo "✅ System dependencies installed"
       
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -q
+          echo "✅ Python dependencies installed"
       
       - name: Determine format and date
         id: params
-        env:
-          INPUT_FORMAT: ${{ github.event.inputs.format }}
-          INPUT_DATE: ${{ github.event.inputs.date }}
-          INPUT_PROJECT: ${{ github.event.inputs.project }}
         run: |
-          python3 << 'EOF'
-          import os
-          from datetime import date
+          FORMAT="${{ github.event.inputs.format || 'shorts' }}"
+          DATE="${{ github.event.inputs.date }}"
+          PROJECT="${{ github.event.inputs.project || 'youtube_horoscope' }}"
           
-          # Параметры
-          fmt = os.getenv('INPUT_FORMAT') or 'shorts'
-          dt = os.getenv('INPUT_DATE') or date.today().isoformat()
-          proj = os.getenv('INPUT_PROJECT') or 'youtube_horoscope'
+          if [ -z "$DATE" ]; then
+            DATE=$(date +%Y-%m-%d)
+          fi
           
-          print(f"Format: {fmt}")
-          print(f"Date: {dt}")
-          print(f"Project: {proj}")
+          echo "format=$FORMAT" >> $GITHUB_OUTPUT
+          echo "date=$DATE" >> $GITHUB_OUTPUT
+          echo "project=$PROJECT" >> $GITHUB_OUTPUT
           
-          # Запись для следующих шагов
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f"format={fmt}\n")
-              f.write(f"date={dt}\n")
-              f.write(f"project={proj}\n")
-          EOF
+          echo "📅 Format: $FORMAT"
+          echo "📆 Date: $DATE"
+          echo "📦 Project: $PROJECT"
       
-      - name: Generate Content (Part 1 → Part 2 → Part 3)
+      - name: Generate Content (Script → TTS → Video)
         id: generate
         env:
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
@@ -103,57 +87,45 @@ jobs:
           import sys
           from pathlib import Path
           
-          # Параметры
           project = os.getenv('PROJECT')
           fmt = os.getenv('FORMAT')
           target_date = os.getenv('DATE')
           
           print(f"\n" + "="*70)
-          print(f"🎬 HOROSCOPE VIDEO GENERATION PIPELINE")
+          print(f"🎬 HOROSCOPE VIDEO GENERATION")
           print(f"="*70)
           print(f"Project: {project}")
           print(f"Format: {fmt}")
-          print(f"Date: {target_date}")
-          print(f"\n")
+          print(f"Date: {target_date}\n")
           
-          # Загрузить конфиг
-          try:
-              from core.utils.config_loader import load
-              config = load(project)
-              print(f"✅ Config loaded: {project}")
-          except Exception as e:
-              print(f"❌ Failed to load config: {e}")
-              sys.exit(1)
-          
-          # ========== PART 1: SCRIPT GENERATION ==========
-          print(f"\n📝 PART 1: Script Generation")
+          # ========== PART 1: SCRIPT GENERATION =========="
+          print(f"📝 PART 1: Script Generation")
           print(f"-" * 70)
           
           try:
               from core.generators import script_generator
               
               if fmt == "shorts":
-                  script = script_generator.generate_short(config, target_date=target_date)
+                  script = script_generator.generate_short(target_date=target_date)
               elif fmt == "long_form":
-                  script = script_generator.generate_long_form(config, target_date=target_date)
+                  script = script_generator.generate_long_form(target_date=target_date)
               elif fmt == "ad":
-                  script = script_generator.generate_ad(config, product_id="horoscope_ad", target_date=target_date)
+                  script = script_generator.generate_ad(target_date=target_date)
               else:
                   raise ValueError(f"Unknown format: {fmt}")
               
-              script_path = script.get('_script_path')
-              print(f"✅ Script generated: {script_path}")
+              print(f"✅ Script generated")
               print(f"   Format: {fmt}")
-              print(f"   Date: {target_date}")
-              
+              print(f"   Length: {len(script.get('script', ''))} chars")
+          
           except Exception as e:
+              print(f"❌ Script generation failed: {e}")
               import traceback
-              print(f"❌ Script generation failed:")
-              print(traceback.format_exc())
+              traceback.print_exc()
               sys.exit(1)
           
-          # ========== PART 2: TTS SYNTHESIS ==========
-          print(f"\n🎙️ PART 2: TTS Synthesis (Gemini)")
+          # ========== PART 2: TTS SYNTHESIS =========="
+          print(f"\n🎙️ PART 2: TTS Synthesis")
           print(f"-" * 70)
           
           try:
@@ -164,30 +136,22 @@ jobs:
                   raise ValueError("GOOGLE_AI_API_KEY not set!")
               
               audio_map = tts_generator.synthesize(
-                  config=config,
                   script=script,
                   mode=fmt,
                   api_key=api_key
               )
               
               print(f"✅ Audio synthesized")
-              print(f"   Engine: {audio_map.get('engine_used')}")
-              print(f"   Duration: {audio_map.get('total_duration_sec'):.1f}s")
-              print(f"   Sample rate: {audio_map.get('sample_rate')} Hz")
-              print(f"   Blocks: {list(audio_map.get('blocks', {}).keys())}")
-              
-              for block_name, block_path in audio_map.get('blocks', {}).items():
-                  if Path(block_path).exists():
-                      size_mb = Path(block_path).stat().st_size / (1024*1024)
-                      print(f"     - {block_name}: {block_path} ({size_mb:.1f}MB)")
+              print(f"   Duration: {audio_map.get('total_duration_sec', 0):.1f}s")
+              print(f"   Blocks: {len(audio_map.get('blocks', {}))}")
           
           except Exception as e:
+              print(f"❌ TTS synthesis failed: {e}")
               import traceback
-              print(f"❌ TTS synthesis failed:")
-              print(traceback.format_exc())
+              traceback.print_exc()
               sys.exit(1)
           
-          # ========== PART 3: VIDEO RENDERING ==========
+          # ========== PART 3: VIDEO RENDERING =========="
           print(f"\n🎥 PART 3: Video Rendering")
           print(f"-" * 70)
           
@@ -195,13 +159,11 @@ jobs:
               from core.generators import video_renderer
               
               video_path = video_renderer.render(
-                  config=config,
                   script=script,
                   audio_map=audio_map,
                   mode=fmt
               )
               
-              # Информация о видео
               video_file = Path(video_path)
               if video_file.exists():
                   size_mb = video_file.stat().st_size / (1024*1024)
@@ -211,91 +173,21 @@ jobs:
                   raise FileNotFoundError(f"Video file not found: {video_path}")
           
           except Exception as e:
+              print(f"❌ Video rendering failed: {e}")
               import traceback
-              print(f"❌ Video rendering failed:")
-              print(traceback.format_exc())
+              traceback.print_exc()
               sys.exit(1)
           
-          # ========== SUMMARY ==========
+          # ========== SUMMARY =========="
           print(f"\n" + "="*70)
           print(f"✅ SUCCESS! Video generation complete")
           print(f"="*70)
-          print(f"Project: {project}")
-          print(f"Format: {fmt}")
           print(f"Output: {video_path}")
           print(f"Size: {size_mb:.1f} MB")
-          print(f"\nVideo is ready for:")
-          if fmt == "shorts":
-              print(f"  - YouTube Shorts (1080×1920)")
-              print(f"  - TikTok / Instagram Reels")
-          elif fmt == "long_form":
-              print(f"  - YouTube (1920×1080, horizontal)")
-          elif fmt == "ad":
-              print(f"  - Ad campaigns (1080×1920)")
-          print(f"\nNext: Download from artifacts and publish to platforms")
+          print(f"\nReady for publishing to YouTube, TikTok, VK, Instagram")
           print(f"")
           
           PYTHON_SCRIPT
-      
-      - name: Generate metadata
-        if: success()
-        env:
-          PROJECT: ${{ steps.params.outputs.project }}
-          FORMAT: ${{ steps.params.outputs.format }}
-          DATE: ${{ steps.params.outputs.date }}
-        run: |
-          python3 << 'PYTHON_META'
-          import json
-          import os
-          from datetime import datetime
-          from pathlib import Path
-          
-          project = os.getenv('PROJECT')
-          fmt = os.getenv('FORMAT')
-          target_date = os.getenv('DATE')
-          
-          output_dir = Path(f"output/videos/{project}")
-          video_files = sorted(list(output_dir.glob(f"{fmt}.mp4"))) if output_dir.exists() else []
-          
-          if not video_files:
-              print(f"ℹ️ No video files to generate metadata for")
-              exit(0)
-          
-          video_path = video_files[-1]
-          
-          # Создать метаданные для платформ
-          metadata = {
-              "title": f"Гороскоп на {target_date}",
-              "description": f"Ваш личный гороскоп на {target_date}\n\nПодпишитесь на канал для новых гороскопов!",
-              "tags": ["гороскоп", "астрология", "зодиак", "астро"],
-              "category": "Entertainment",
-              "visibility": "public",
-              "format": fmt,
-              "date_generated": datetime.now().isoformat(),
-              "video_path": str(video_path),
-          }
-          
-          # Формат-специфичные параметры
-          if fmt == "shorts":
-              metadata["platform"] = ["YouTube Shorts", "TikTok", "Instagram Reels"]
-              metadata["recommended_tags"] = ["horoscope", "astrology", "zodiac", "viral"]
-          elif fmt == "long_form":
-              metadata["platform"] = ["YouTube"]
-              metadata["chapters"] = [
-                  {"title": "Любовь", "timestamp": "0:10"},
-                  {"title": "Деньги", "timestamp": "4:00"},
-                  {"title": "Здоровье", "timestamp": "8:00"},
-              ]
-          elif fmt == "ad":
-              metadata["platform"] = ["YouTube", "TikTok", "Instagram"]
-              metadata["ad_duration_sec"] = 15
-          
-          metadata_path = output_dir / f"metadata_{fmt}.json"
-          with open(metadata_path, 'w') as f:
-              json.dump(metadata, f, indent=2, ensure_ascii=False)
-          
-          print(f"✅ Metadata generated: {metadata_path}")
-          PYTHON_META
       
       - name: Upload artifacts
         if: always()
@@ -311,48 +203,25 @@ jobs:
       
       - name: Summary
         if: success()
-        env:
-          FORMAT: ${{ steps.params.outputs.format }}
-          PROJECT: ${{ steps.params.outputs.project }}
         run: |
-          python3 << 'EOF'
-          import os
-          from pathlib import Path
-          
-          project = os.getenv('PROJECT')
-          fmt = os.getenv('FORMAT')
-          output_dir = Path(f"output/videos/{project}")
-          
-          video_files = sorted(list(output_dir.glob(f"{fmt}.mp4"))) if output_dir.exists() else []
-          
-          if video_files:
-              video_path = video_files[-1]
-              size_mb = video_path.stat().st_size / (1024*1024)
-              print(f"\n" + "="*70)
-              print(f"✅ GENERATION COMPLETE")
-              print(f"="*70)
-              print(f"Video: {video_path.name}")
-              print(f"Size: {size_mb:.1f} MB")
-              print(f"\n📥 Download from GitHub Actions artifacts")
-              print(f"📤 Then publish to: YouTube, TikTok, Instagram")
-              print(f"")
-          else:
-              print(f"⚠️ Video file not found")
-          EOF
+          echo "✅ Video generation complete"
+          echo "Format: ${{ steps.params.outputs.format }}"
+          echo "Date: ${{ steps.params.outputs.date }}"
+          echo "\n📥 Download from artifacts"
+          echo "📤 Then publish to social media"
 
   notify-result:
     runs-on: ubuntu-22.04
-    needs: generate-video
-    if: always() && secrets.TELEGRAM_BOT_TOKEN
+    needs: [generate-video]
+    if: always()
     
     steps:
-      - name: Send notification
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          FORMAT: ${{ github.event.inputs.format || 'shorts' }}
-          STATUS: ${{ needs.generate-video.result }}
+      - name: Send Telegram notification
+        if: secrets.TELEGRAM_BOT_TOKEN
         run: |
+          FORMAT="${{ github.event.inputs.format || 'shorts' }}"
+          STATUS="${{ needs.generate-video.result }}"
+          
           if [ "$STATUS" = "success" ]; then
             EMOJI="✅"
             TEXT="Horoscope video generated successfully"
@@ -361,9 +230,10 @@ jobs:
             TEXT="Horoscope video generation failed"
           fi
           
-          MESSAGE="$EMOJI $TEXT%0AFormat: $FORMAT%0AWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MESSAGE="${EMOJI} ${TEXT}%0AFormat: ${FORMAT}%0AWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
           curl -s -X POST \
             -H 'Content-Type: application/x-www-form-urlencoded' \
-            -d "chat_id=$TELEGRAM_CHAT_ID&text=$MESSAGE&parse_mode=HTML" \
-            "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" > /dev/null
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}&text=$MESSAGE&parse_mode=HTML" \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" > /dev/null || true
+        continue-on-error: true
