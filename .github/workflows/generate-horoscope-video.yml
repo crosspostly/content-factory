@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       format:
-        description: 'Video format (shorts | long-form | ad)'
+        description: 'Video format (shorts | long_form | ad)'
         required: true
         default: 'shorts'
         type: choice
         options:
           - shorts
-          - long-form
+          - long_form
           - ad
       date:
         description: 'Horoscope date (YYYY-MM-DD, optional - uses today)'
@@ -273,7 +273,8 @@ jobs:
               
               print(f"✅ Audio synthesized")
               print(f"   Duration: {audio_map.get('total_duration_sec', 0):.1f}s")
-              print(f"   Blocks: {len(audio_map.get('blocks', {}))}")          
+              print(f"   Blocks: {len(audio_map.get('blocks', {}))}")
+              print(f"   Engine: {audio_map.get('engine_used', 'unknown')}")
           except Exception as e:
               print(f"❌ TTS synthesis failed: {e}")
               import traceback
