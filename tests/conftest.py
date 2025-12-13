@@ -6,6 +6,7 @@ import sys
 from unittest.mock import MagicMock
 sys.modules['google'] = MagicMock()
 sys.modules['google.genai'] = MagicMock()
+sys.modules['core.utils.model_router'] = MagicMock()
 
 import os
 import tempfile
