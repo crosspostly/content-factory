@@ -17,6 +17,12 @@ from core.utils.model_router import (
     generate_text,
 )
 
+# Mock google.genai to prevent import errors
+import sys
+if 'google.genai' not in sys.modules:
+    sys.modules['google'] = MagicMock()
+    sys.modules['google.genai'] = MagicMock()
+
 
 class TestModelDetection:
     """Test model provider detection logic."""
