@@ -152,9 +152,9 @@ class TestSynthesizeModes:
     @patch("core.generators.tts_generator._synthesize_gemini_tts_async")
     def test_synthesize_ad(self, mock_synth, mock_config):
         """Test ad synthesis with Gemini TTS."""
-                    async def mock_return(*args, **kwargs):
-                return 3.0
-            mock_synth.side_effect = mock_return
+        async def mock_return(*args, **kwargs):
+            return 3.0
+        mock_synth.side_effect = mock_return
 
         
         script = {

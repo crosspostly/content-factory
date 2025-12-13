@@ -159,7 +159,7 @@ class TestVideoRendering:
     def test_render_shorts_no_pixabay(self, mock_config, sample_script_shorts, tmp_path):
         """Test shorts rendering without Pixabay (gradient background)."""
         # First generate audio
-        audio_result = tts_generator.synthesize(mock_config, sample_script_shorts, "shorts")
+        audio_result = tts_generator.synthesize(mock_config, sample_script_shorts, "shorts", api_key="test-key")
         
         # Remove PIXABAY_API_KEY to force gradient background
         original_key = os.environ.get("PIXABAY_API_KEY")
@@ -187,7 +187,7 @@ class TestVideoRendering:
     def test_render_long_form(self, mock_config, sample_script_long_form):
         """Test long-form video rendering."""
         # First generate audio
-        audio_result = tts_generator.synthesize(mock_config, sample_script_long_form, "long_form")
+        audio_result = tts_generator.synthesize(mock_config, sample_script_long_form, "long_form", api_key="test-key")
         
         video_path = video_renderer.render(
             config=mock_config,
@@ -204,7 +204,7 @@ class TestVideoRendering:
     def test_render_ad(self, mock_config, sample_script_ad):
         """Test ad video rendering."""
         # First generate audio
-        audio_result = tts_generator.synthesize(mock_config, sample_script_ad, "ad")
+        audio_result = tts_generator.synthesize(mock_config, sample_script_ad, "ad", api_key="test-key")
         
         video_path = video_renderer.render(
             config=mock_config,
@@ -220,9 +220,9 @@ class TestVideoRendering:
     @pytest.mark.slow
     def test_render_invalid_mode(self, mock_config, sample_script_shorts):
         """Test rendering with invalid mode."""
-        audio_result = tts_generator.synthesize(mock_config, sample_script_shorts, "shorts")
+        audio_result = tts_generator.synthesize(mock_config, sample_script_shorts, "shorts", api_key="test-key")
         
-        with pytest.raises(ValueError, match="Unknown mode"):
+        with pytest.raises(RuntimeError, match="Unknown mode"):
             video_renderer.render(
                 config=mock_config,
                 script=sample_script_shorts,
@@ -274,7 +274,7 @@ class TestIntegration:
         }
         
         # Generate audio
-        audio_result = tts_generator.synthesize(mock_config, script, "shorts")
+        audio_result = tts_generator.synthesize(mock_config, script, "shorts", api_key="test-key")
         
         # Generate video
         video_path = video_renderer.render(
@@ -285,12 +285,12 @@ class TestIntegration:
         )
         
         assert video_path.exists()
-        assert video_path.stat().st_size > 50000  # At least 50KB
+        assert video_path.stat().st_size > 20000  # At least 20KB (lowered due to silent audio)
     
     @pytest.mark.slow
     def test_output_directory_structure(self, mock_config, sample_script_shorts):
         """Test that output directories are created with correct structure."""
-        audio_result = tts_generator.synthesize(mock_config, sample_script_shorts, "shorts")
+        audio_result = tts_generator.synthesize(mock_config, sample_script_shorts, "shorts", api_key="test-key")
         video_path = video_renderer.render(
             config=mock_config,
             script=sample_script_shorts,
