@@ -73,6 +73,29 @@ jobs:
           echo "📆 Date: $DATE"
           echo "📦 Project: $PROJECT"
       
+      - name: Validate API Keys
+        run: |
+          echo "🔐 Validating required secrets..."
+          
+          # Check GOOGLE_AI_API_KEY
+          if [ -z "${{ secrets.GOOGLE_AI_API_KEY }}" ]; then
+            echo "❌ GOOGLE_AI_API_KEY is not set in GitHub Secrets"
+            echo "   Go to: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "   Add: GOOGLE_AI_API_KEY = <your Google AI key>"
+            exit 1
+          fi
+          
+          # Show first 10 chars for debug (masked in logs)
+          API_KEY="${{ secrets.GOOGLE_AI_API_KEY }}"
+          echo "✅ GOOGLE_AI_API_KEY found (${#API_KEY} chars)"
+          
+          # Optional keys
+          if [ -z "${{ secrets.PIXABAY_API_KEY }}" ]; then
+            echo "⚠️  PIXABAY_API_KEY not set (optional, will use fallback)"
+          else
+            echo "✅ PIXABAY_API_KEY found"
+          fi
+      
       - name: Generate Content (Script → TTS → Video with ModelRouter)
         id: generate
         env:
@@ -95,9 +118,20 @@ jobs:
           target_date = os.getenv('DATE')
           api_key = os.getenv('GOOGLE_AI_API_KEY')
           
+          # Validate API key
           if not api_key:
-              print("❌ Error: GOOGLE_AI_API_KEY not set")
+              print("❌ CRITICAL ERROR: GOOGLE_AI_API_KEY not found in environment")
+              print("   This should have been caught in 'Validate API Keys' step")
+              print("   Check GitHub Secrets configuration at:")
+              print("   https://github.com/${{ github.repository }}/settings/secrets/actions")
               sys.exit(1)
+          
+          if len(api_key) < 20:
+              print(f"❌ ERROR: API key appears to be invalid (too short: {len(api_key)} chars)")
+              print("   Valid Google AI keys are longer than 20 characters")
+              sys.exit(1)
+          
+          print(f"✅ API key validated ({len(api_key)} chars)")
           
           print(f"\n" + "="*70)
           print(f"🎬 HOROSCOPE VIDEO GENERATION")
@@ -106,7 +140,7 @@ jobs:
           print(f"Format: {fmt}")
           print(f"Date: {target_date}\n")
           
-          # ========== LOAD CONFIG =========="
+          # ========== LOAD CONFIG ==========
           print(f"⚡ Loading configuration...")
           try:
               from core.utils.config_loader import ProjectConfig
@@ -125,7 +159,7 @@ jobs:
               )
               print(f"⚠️ Using fallback config")
 
-          # ========== PART 1: SCRIPT GENERATION =========="
+          # ========== PART 1: SCRIPT GENERATION ==========
           print(f"\n📝 PART 1: Script Generation (with ModelRouter)")
           print(f"-" * 70)
           
@@ -164,7 +198,7 @@ jobs:
               traceback.print_exc()
               sys.exit(1)
           
-          # ========== PART 2: TTS SYNTHESIS =========="
+          # ========== PART 2: TTS SYNTHESIS ==========
           print(f"\n🎙️ PART 2: TTS Synthesis")
           print(f"-" * 70)
           
@@ -187,7 +221,7 @@ jobs:
               traceback.print_exc()
               sys.exit(1)
           
-          # ========== PART 3: VIDEO RENDERING =========="
+          # ========== PART 3: VIDEO RENDERING ==========
           print(f"\n🎥 PART 3: Video Rendering")
           print(f"-" * 70)
           
@@ -214,7 +248,7 @@ jobs:
               traceback.print_exc()
               sys.exit(1)
           
-          # ========== SUMMARY =========="
+          # ========== SUMMARY ==========
           print(f"\n" + "="*70)
           print(f"✅ SUCCESS! Video generation complete")
           print(f"="*70)
