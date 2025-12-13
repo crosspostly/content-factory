@@ -254,6 +254,7 @@ jobs:
               from core.generators import tts_generator
               
               audio_map = tts_generator.synthesize(
+                  config=config,
                   script=script,
                   mode=fmt,
                   api_key=api_key
