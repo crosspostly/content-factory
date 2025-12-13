@@ -3,10 +3,9 @@
 # Project-specific settings override these in projects/<project>/config.yaml
 
 generation:
-  # Primary and fallback models - ONLY WORKING MODELS
+  # ONLY gemini-2.5-flash
   primary_model: gemini-2.5-flash
-  fallback_models:
-    - gemini-1.5-flash-001
+  fallback_models: []
   
   # Generation parameters
   temperature: 0.8
