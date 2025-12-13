@@ -1,0 +1,167 @@
+name: Generate Batch Horoscopes
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: 'Start date (YYYY-MM-DD)'
+        required: true
+        default: '2025-12-13'
+        type: string
+      num_days:
+        description: 'Number of days'
+        required: true
+        default: '7'
+        type: choice
+        options:
+          - '1'
+          - '7'
+          - '14'
+          - '30'
+      format:
+        description: 'Video format'
+        required: true
+        default: 'shorts'
+        type: choice
+        options:
+          - shorts
+          - long-form
+          - ad
+      project:
+        description: 'Project name'
+        required: false
+        default: 'youtube_horoscope'
+        type: string
+
+jobs:
+  batch-generate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180  # 3 hours for 30 days
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Cache system dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: ffmpeg imagemagick ghostscript fonts-dejavu-core libsm6 libxext6
+          version: 1.0
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg imagemagick ghostscript fonts-dejavu-core libsm6 libxext6
+          echo "✅ FFmpeg: $(ffmpeg -version | head -1)"
+      
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -q
+      
+      - name: Generate batch
+        id: batch
+        env:
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          START_DATE: ${{ github.event.inputs.start_date }}
+          NUM_DAYS: ${{ github.event.inputs.num_days }}
+          FORMAT: ${{ github.event.inputs.format }}
+          PROJECT: ${{ github.event.inputs.project }}
+        run: |
+          echo "Starting batch generation..."
+          echo "Start date: $START_DATE"
+          echo "Number of days: $NUM_DAYS"
+          echo "Format: $FORMAT"
+          echo "Project: $PROJECT"
+          echo ""
+          
+          python3 -m core.generators.batch_generator \
+            --project "$PROJECT" \
+            --start-date "$START_DATE" \
+            --num-days "$NUM_DAYS" \
+            --mode "$FORMAT" \
+            2>&1 | tee batch.log
+          
+          # Count results
+          SUCCESS_COUNT=$(find output/videos -name "${FORMAT}.mp4" 2>/dev/null | wc -l || echo 0)
+          echo "success_count=$SUCCESS_COUNT" >> $GITHUB_OUTPUT
+          echo "num_days=$NUM_DAYS" >> $GITHUB_OUTPUT
+      
+      - name: Upload batch videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: batch-videos-${{ github.event.inputs.start_date }}-${{ github.event.inputs.num_days }}days
+          path: output/videos/
+          retention-days: 30  # Longer retention for batch
+          if-no-files-found: warn
+      
+      - name: Upload batch logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: batch-logs-${{ github.event.inputs.start_date }}
+          path: |
+            batch.log
+            output/logs/
+            output/metadata/
+          retention-days: 7
+          if-no-files-found: warn
+      
+      - name: Create GitHub Summary
+        if: always()
+        env:
+          SUCCESS_COUNT: ${{ steps.batch.outputs.success_count }}
+          NUM_DAYS: ${{ steps.batch.outputs.num_days }}
+          START_DATE: ${{ github.event.inputs.start_date }}
+          FORMAT: ${{ github.event.inputs.format }}
+        run: |
+          echo "## 📊 Batch Generation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📅 Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Start date:** $START_DATE" >> $GITHUB_STEP_SUMMARY
+          echo "- **Days generated:** $NUM_DAYS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Format:** $FORMAT" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 📈 Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Successful:** $SUCCESS_COUNT" >> $GITHUB_STEP_SUMMARY
+          
+          FAILED=$((NUM_DAYS - SUCCESS_COUNT))
+          echo "- **Failed:** $FAILED" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$NUM_DAYS" -gt 0 ]; then
+            SUCCESS_RATE=$((SUCCESS_COUNT * 100 / NUM_DAYS))
+            echo "- **Success rate:** ${SUCCESS_RATE}%" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # List generated videos
+          if [ "$SUCCESS_COUNT" -gt 0 ]; then
+            echo "### 🎬 Generated Videos" >> $GITHUB_STEP_SUMMARY
+            find output/videos -name "${FORMAT}.mp4" 2>/dev/null | while read -r video; do
+              SIZE_MB=$(du -m "$video" | cut -f1)
+              echo "- \`$video\` (${SIZE_MB} MB)" >> $GITHUB_STEP_SUMMARY
+            done
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "### 📥 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download batch artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "2. Review video quality" >> $GITHUB_STEP_SUMMARY
+          echo "3. Schedule publishing to platforms" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$FAILED" -gt 0 ]; then
+            echo "⚠️ **Note:** $FAILED videos failed. Check logs for details." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi

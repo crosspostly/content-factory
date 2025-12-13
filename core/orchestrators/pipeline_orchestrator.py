@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import json
 import os
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 from core.utils import config_loader, logging_utils
@@ -47,19 +49,45 @@ def main(args: argparse.Namespace) -> int:
         logging_utils.log_error(f"Config validation failed: {e}", e)
         return 1
 
+    # Get API key for script generation
+    api_key = os.getenv("GOOGLE_AI_API_KEY")
+    if not api_key:
+        logging_utils.log_error("GOOGLE_AI_API_KEY environment variable not set")
+        return 1
+
     try:
         from core.generators import script_generator
+        from core.utils.model_router import get_router
 
+        logging_utils.log_info("\n" + "="*70)
+        logging_utils.log_info("🚀 CONTENT FACTORY PIPELINE START")
+        logging_utils.log_info("="*70)
+        logging_utils.log_info(f"Date: {args.date}")
+        logging_utils.log_info(f"Mode: {args.mode}")
+        logging_utils.log_info(f"Project: {args.project}")
+        logging_utils.log_info("="*70 + "\n")
+
+        logging_utils.log_info("📝 Step 1: Generating script...")
         if args.mode == "shorts":
-            script: Any = script_generator.generate_short(config, target_date=args.date)
+            script: Any = script_generator.generate_short(config, target_date=args.date, api_key=api_key)
         elif args.mode == "long_form":
-            script = script_generator.generate_long_form(config, target_date=args.date)
+            script = script_generator.generate_long_form(config, target_date=args.date, api_key=api_key)
         elif args.mode == "ad":
             if not args.product_id:
                 raise ValueError("--product-id is required for mode=ad")
-            script = script_generator.generate_ad(config, product_id=args.product_id)
+            script = script_generator.generate_ad(config, product_id=args.product_id, target_date=args.date, api_key=api_key)
         else:
             raise ValueError(f"Unknown mode: {args.mode}")
+
+        # Log ModelRouter statistics
+        router = get_router(api_key)
+        stats = router.get_stats()
+        logging_utils.log_info("📊 Script generation statistics:")
+        logging_utils.log_info(f"   Total attempts: {stats['total_attempts']}")
+        logging_utils.log_info(f"   Successful: {stats['successful']}")
+        logging_utils.log_info(f"   Success rate: {stats['success_rate']}")
+        logging_utils.log_info(f"   Models used: {stats['model_usage']}")
+        logging_utils.log_info("")
 
     except Exception as e:
         logging_utils.log_error(f"Script generation failed: {e}", e)
@@ -70,12 +98,9 @@ def main(args: argparse.Namespace) -> int:
     try:
         from core.generators import tts_generator
 
-        # Get API key from environment
-        api_key = os.getenv("GOOGLE_AI_API_KEY")
-        if not api_key:
-            raise ValueError("GOOGLE_AI_API_KEY environment variable not set")
-
+        logging_utils.log_info("🎤 Step 2: Generating audio...")
         audio_map = tts_generator.synthesize(config, script, args.mode, api_key=api_key)
+        logging_utils.log_info(f"✅ Generated {len(audio_map) if isinstance(audio_map, (list, dict)) else 'N/A'} audio blocks\n")
     except Exception as e:
         logging_utils.log_error(f"TTS synthesis failed: {e}", e)
         if config.monitoring.telegram_notifications:
@@ -84,13 +109,58 @@ def main(args: argparse.Namespace) -> int:
 
     try:
         from core.generators import video_renderer
+        from core.utils.model_router import get_router
 
+        logging_utils.log_info("🎬 Step 3: Rendering video...")
         video_path = video_renderer.render(config, script, audio_map, args.mode)
+        logging_utils.log_info(f"✅ Video created: {video_path}\n")
     except Exception as e:
         logging_utils.log_error(f"Video rendering failed: {e}", e)
         if config.monitoring.telegram_notifications:
             logging_utils.send_telegram_alert(config, f"❌ Video rendering failed: {str(e)}")
         return 1
+
+    # Save metadata
+    try:
+        logging_utils.log_info("📋 Step 4: Saving metadata...")
+        
+        router = get_router(api_key)
+        stats = router.get_stats()
+        
+        metadata = {
+            "date": args.date,
+            "mode": args.mode,
+            "project": args.project,
+            "video_path": str(video_path),
+            "script_path": script.get("_script_path", ""),
+            "script_length": len(script.get("script", "")),
+            "audio_blocks": len(audio_map) if isinstance(audio_map, (list, dict)) else 0,
+            "generation_stats": stats,
+            "generated_at": datetime.datetime.now().isoformat(),
+        }
+        
+        metadata_dir = Path("output") / "metadata"
+        metadata_dir.mkdir(parents=True, exist_ok=True)
+        metadata_path = metadata_dir / f"{args.date}_{args.mode}.json"
+        
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+        
+        logging_utils.log_info(f"✅ Metadata saved: {metadata_path}\n")
+    except Exception as e:
+        logging_utils.log_error(f"Failed to save metadata: {e}", e)
+        # Don't fail the pipeline for metadata errors
+
+    # Final summary
+    logging_utils.log_info("="*70)
+    logging_utils.log_info("✅ PIPELINE COMPLETE")
+    logging_utils.log_info("="*70)
+    logging_utils.log_info(f"Video: {video_path}")
+    logging_utils.log_info(f"Metadata: {metadata_path if 'metadata_path' in locals() else 'N/A'}")
+    logging_utils.log_info(f"Script length: {len(script.get('script', ''))} chars")
+    logging_utils.log_info(f"API calls: {stats['total_attempts']}")
+    logging_utils.log_info(f"Success rate: {stats['success_rate']}")
+    logging_utils.log_info("="*70 + "\n")
 
     logging_utils.log_success(f"Video created: {video_path}")
 

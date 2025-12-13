@@ -185,7 +185,6 @@ jobs:
           print(f"Output: {video_path}")
           print(f"Size: {size_mb:.1f} MB")
           print(f"\nReady for publishing to YouTube, TikTok, VK, Instagram")
-          print(f"")
           
           PYTHON_SCRIPT
       

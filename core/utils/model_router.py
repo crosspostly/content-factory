@@ -18,18 +18,19 @@ import google.generativeai as genai
 logger = logging.getLogger(__name__)
 
 # Model configuration
+# Updated Dec 2025: gemini-2.0-flash deprecated, using gemini-2.5-flash as primary
 MODELS = {
     "script": {
-        "primary": "gemini-2.5-flash",
-        "fallback": "gemini-2.0-flash"
+        "primary": "gemini-2.0-flash-exp",
+        "fallback": "gemini-1.5-flash"
     },
     "tts": {
-        "primary": "gemini-2.5-flash",
-        "fallback": "gemini-2.0-flash"
+        "primary": "gemini-2.0-flash-exp",
+        "fallback": "gemini-1.5-flash"
     },
     "image_gen": {
-        "primary": "gemini-2.5-flash",
-        "fallback": "gemini-2.0-flash"
+        "primary": "gemini-2.0-flash-exp",
+        "fallback": "gemini-1.5-flash"
     }
 }
 
