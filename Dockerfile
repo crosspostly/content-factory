@@ -1,12 +1,13 @@
-FROM ubuntu:24.04
+FROM ubuntu:22.04
 LABEL maintainer="Pavel Shekhov <shekhovpavel@gmail.com>"
 LABEL description="Content Factory runtime environment"
 
 # Avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies with clean apt cache
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     python3.11 \
     python3-pip \
     ffmpeg \
