@@ -3,10 +3,10 @@
 # Project-specific settings override these in projects/<project>/config.yaml
 
 generation:
-  # gemini-2.5-flash primary, gemini-2.5-flash-lite fallback
-  primary_model: gemini-2.5-flash
+  # Primary: qwen2.5-coder (local Ollama), Fallback: gemini-2.5-flash (API)
+  primary_model: qwen2.5-coder:1.5b
   fallback_models:
-    - gemini-2.5-flash-lite
+    - gemini-2.5-flash
   
   # Generation parameters
   temperature: 0.8
