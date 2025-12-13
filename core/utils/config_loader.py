@@ -1,213 +1,302 @@
-from __future__ import annotations
+#!/usr/bin/env python3
+"""
+Configuration loader for content-factory projects.
 
+Handles loading, validating, and merging project configurations.
+"""
+
+import os
 import json
-from collections.abc import Iterator, Mapping
+import yaml
 from pathlib import Path
-from typing import Any
-
-from .yaml_loader import safe_load
-
-
-def _wrap(value: Any) -> Any:
-    if isinstance(value, dict):
-        return ConfigNode(value)
-    if isinstance(value, list):
-        return [_wrap(v) for v in value]
-    return value
+from typing import Dict, Any, Optional
+from dataclasses import dataclass, asdict
 
 
-class ConfigNode(Mapping[str, Any]):
-    """Dict-like config node with attribute access (stdlib-only)."""
-
-    def __init__(self, data: dict[str, Any] | None = None):
-        self._data: dict[str, Any] = {}
-        for k, v in (data or {}).items():
-            self._data[str(k)] = _wrap(v)
-
-    def __getitem__(self, key: str) -> Any:
-        return self._data[key]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._data)
-
-    def __len__(self) -> int:
-        return len(self._data)
-
-    def __getattr__(self, name: str) -> Any:
-        try:
-            return self._data[name]
-        except KeyError as e:
-            raise AttributeError(name) from e
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return self._data.get(key, default)
-
-    def to_dict(self) -> dict[str, Any]:
-        def unwrap(obj: Any) -> Any:
-            if isinstance(obj, ConfigNode):
-                return {k: unwrap(v) for k, v in obj._data.items()}
-            if isinstance(obj, list):
-                return [unwrap(v) for v in obj]
-            return obj
-
-        return unwrap(self)
-
-
+@dataclass
 class ProjectConfig:
-    """Project config loaded from YAML.
-
-    Merges shared config (config/shared.yaml) with project-specific config
-    (projects/<project_name>/config.yaml). Project-specific overrides shared.
-
-    Provides dot-access similar to Pydantic models in the tech spec.
-    """
-
-    def __init__(self, data: dict[str, Any]):
-        self._raw = data
-
-        self.project = ConfigNode(data.get("project") or {})
-        self.content_strategy = ConfigNode(data.get("content_strategy") or {})
-        self.generation = ConfigNode(data.get("generation") or {})
-        self.audio = ConfigNode(data.get("audio") or {})
-        self.video = ConfigNode(data.get("video") or {})
-        self.subtitles = ConfigNode(data.get("subtitles") or {})
-        self.upload = ConfigNode(data.get("upload") or {})
-        self.caching = ConfigNode(data.get("caching") or {})
-        self.monitoring = ConfigNode(data.get("monitoring") or {})
-        self.debugger = ConfigNode(data.get("debugger") or {})
-        self.ci_cd = ConfigNode(data.get("ci_cd") or {})
-        self.workflows = ConfigNode(data.get("workflows") or {})
-
-        self.content_plan_file = data.get("content_plan_file")
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            **self._raw,
-            "project": self.project.to_dict(),
-            "content_strategy": self.content_strategy.to_dict(),
-            "generation": self.generation.to_dict(),
-            "audio": self.audio.to_dict(),
-            "video": self.video.to_dict(),
-            "subtitles": self.subtitles.to_dict(),
-            "upload": self.upload.to_dict(),
-            "caching": self.caching.to_dict(),
-            "monitoring": self.monitoring.to_dict(),
-            "debugger": self.debugger.to_dict(),
-            "ci_cd": self.ci_cd.to_dict(),
-            "workflows": self.workflows.to_dict(),
-        }
-
-
-def _merge_dicts(shared: dict[str, Any], project: dict[str, Any]) -> dict[str, Any]:
-    """Deep merge: project values override shared values."""
-    result = shared.copy()
-    for key, value in project.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = _merge_dicts(result[key], value)
+    """Represents a project configuration."""
+    
+    name: str
+    description: str
+    content_type: str
+    platforms: list
+    enabled: bool = True
+    
+    generation: Dict[str, Any] = None
+    api_keys: list = None
+    scheduling: Dict[str, Any] = None
+    output: Dict[str, Any] = None
+    
+    _raw: Dict[str, Any] = None  # Original config dict
+    _path: Path = None  # Config file path
+    
+    def __post_init__(self):
+        """Initialize defaults."""
+        if self.generation is None:
+            self.generation = {
+                "primary_model": "gemini-2.5-flash",
+                "fallback_models": ["gemini-2.5-pro"],
+                "temperature": 0.7,
+                "max_retries": 2,
+            }
+        
+        if self.api_keys is None:
+            self.api_keys = ["GOOGLE_AI_API_KEY"]
+        
+        if self.scheduling is None:
+            self.scheduling = {
+                "enabled": False,
+                "cron": None,
+                "timezone": "UTC",
+            }
+        
+        if self.output is None:
+            self.output = {
+                "format": "video",
+                "video_quality": "1080p",
+                "frame_rate": 30,
+            }
+    
+    @classmethod
+    def load(cls, config_path: str) -> "ProjectConfig":
+        """Load config from YAML or JSON file.
+        
+        Args:
+            config_path: Path to config file (relative to repo root)
+            
+        Returns:
+            ProjectConfig instance
+            
+        Raises:
+            FileNotFoundError: If config file not found
+            ValueError: If config is invalid
+        """
+        # Resolve path
+        if not Path(config_path).is_absolute():
+            repo_root = Path(__file__).parent.parent.parent
+            config_path = repo_root / config_path
         else:
-            result[key] = value
-    return result
-
-
-def _validate_required(data: dict[str, Any]) -> None:
-    required = [
-        "project",
-        "content_strategy",
-        "generation",
-        "audio",
-        "video",
-        "subtitles",
-        "upload",
-        "caching",
-        "monitoring",
-    ]
-    missing = [k for k in required if k not in data]
-    if missing:
-        raise ValueError(f"Missing required config sections: {', '.join(missing)}")
-
-
-def load(project_name: str) -> ProjectConfig:
-    """Load project config by merging shared config with project-specific config.
-
-    1. Load shared config from config/shared.yaml
-    2. Load project config from projects/<project_name>/config.yaml
-    3. Merge: project values override shared
-    4. Validate required sections
-
-    Raises:
-        FileNotFoundError: if config files are missing
-        ValueError: if YAML is invalid or missing required sections
-    """
-
-    # Load shared config
-    shared_path = Path("config") / "shared.yaml"
-    if not shared_path.exists():
-        raise FileNotFoundError(f"Shared config not found: {shared_path}")
-
-    with shared_path.open("r", encoding="utf-8") as f:
-        shared_data = safe_load(f) or {}
-
-    if not isinstance(shared_data, dict):
-        raise ValueError("Shared config YAML must be a mapping")
-
-    # Load project config
-    project_path = Path("projects") / project_name / "config.yaml"
-    if not project_path.exists():
-        raise FileNotFoundError(f"Project config not found: {project_path}")
-
-    with project_path.open("r", encoding="utf-8") as f:
-        project_data = safe_load(f) or {}
-
-    if not isinstance(project_data, dict):
-        raise ValueError(f"Project config ({project_name}) YAML must be a mapping")
-
-    # Merge: project overrides shared
-    data = _merge_dicts(shared_data, project_data)
-
-    # Ensure project.folder is set
-    data.setdefault("project", {})
-    if isinstance(data["project"], dict):
-        data["project"].setdefault("folder", project_name)
-
-    # Defaults for tech-spec compatibility
-    gen = data.setdefault("generation", {})
-    if isinstance(gen, dict):
-        gen.setdefault("fallback_models", [])
-        gen.setdefault("provider_priority", [])
-        gen.setdefault("retry_delay_sec", 2)
-
-    _validate_required(data)
-    return ProjectConfig(data)
-
-
-def load_all_projects() -> dict[str, ProjectConfig]:
-    """Load all project configs from projects/ directory.
-
-    Returns:
-        Dict mapping project_name -> ProjectConfig
-    """
-    projects_dir = Path("projects")
-    result = {}
-
-    for project_dir in projects_dir.iterdir():
-        if not project_dir.is_dir():
-            continue
-        config_file = project_dir / "config.yaml"
-        if not config_file.exists():
-            continue
+            config_path = Path(config_path)
+        
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config not found: {config_path}")
+        
+        # Load config
+        with open(config_path, "r") as f:
+            if config_path.suffix == ".yaml" or config_path.suffix == ".yml":
+                raw_config = yaml.safe_load(f)
+            elif config_path.suffix == ".json":
+                raw_config = json.load(f)
+            else:
+                raise ValueError(f"Unsupported config format: {config_path.suffix}")
+        
+        if not raw_config:
+            raise ValueError(f"Empty config: {config_path}")
+        
+        # Extract project section
+        if "project" not in raw_config:
+            raise ValueError("Config must have 'project' section")
+        
+        project_data = raw_config["project"]
+        
+        # Create instance
+        config = cls(
+            name=project_data.get("name", ""),
+            description=project_data.get("description", ""),
+            content_type=project_data.get("content_type", "shorts"),
+            platforms=project_data.get("platforms", ["youtube"]),
+            enabled=project_data.get("enabled", True),
+            generation=raw_config.get("generation", {}),
+            api_keys=raw_config.get("api_keys", []),
+            scheduling=raw_config.get("scheduling", {}),
+            output=raw_config.get("output", {}),
+            _raw=raw_config,
+            _path=config_path,
+        )
+        
+        config._validate()
+        return config
+    
+    def _validate(self) -> None:
+        """Validate config values."""
+        if not self.name:
+            raise ValueError("Project name is required")
+        
+        if self.content_type not in ["shorts", "long-form", "ad", "podcast", "custom"]:
+            raise ValueError(f"Invalid content_type: {self.content_type}")
+        
+        if not isinstance(self.platforms, list) or not self.platforms:
+            raise ValueError("Platforms must be a non-empty list")
+        
+        if not isinstance(self.api_keys, list):
+            raise ValueError("API keys must be a list")
+    
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get value from raw config.
+        
+        Args:
+            key: Config key (supports dot notation: 'generation.temperature')
+            default: Default value if key not found
+            
+        Returns:
+            Config value or default
+        """
+        if not self._raw:
+            return default
+        
+        parts = key.split(".")
+        value = self._raw
+        
         try:
-            result[project_dir.name] = load(project_dir.name)
-        except Exception as e:
-            # Log error but continue loading other projects
-            print(f"Warning: Failed to load project {project_dir.name}: {e}")
+            for part in parts:
+                value = value[part]
+            return value
+        except (KeyError, TypeError):
+            return default
+    
+    def has_api_key(self, key: str) -> bool:
+        """Check if API key is configured.
+        
+        Args:
+            key: API key name
+            
+        Returns:
+            True if key is in api_keys list
+        """
+        return key in self.api_keys
+    
+    def get_env_var(self, key: str) -> Optional[str]:
+        """Get environment variable for API key.
+        
+        Args:
+            key: API key name
+            
+        Returns:
+            Environment variable value or None
+        """
+        return os.getenv(key)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        return asdict(self)
+    
+    def to_json(self) -> str:
+        """Convert to JSON string."""
+        return json.dumps(self._raw, indent=2)
+    
+    def __repr__(self) -> str:
+        return f"ProjectConfig(name={self.name}, type={self.content_type}, platforms={self.platforms})"
 
-    return result
+
+class ConfigManager:
+    """Manage multiple project configurations."""
+    
+    def __init__(self, repo_root: str = None):
+        """Initialize config manager.
+        
+        Args:
+            repo_root: Repository root directory
+        """
+        self.repo_root = Path(repo_root) if repo_root else Path(__file__).parent.parent.parent
+        self.projects_dir = self.repo_root / "projects"
+        self._configs: Dict[str, ProjectConfig] = {}
+    
+    def load_all(self) -> Dict[str, ProjectConfig]:
+        """Load all project configs.
+        
+        Returns:
+            Dictionary of {project_name: ProjectConfig}
+        """
+        if not self.projects_dir.exists():
+            return {}
+        
+        configs = {}
+        for project_dir in self.projects_dir.iterdir():
+            if not project_dir.is_dir():
+                continue
+            
+            config_file = project_dir / "config.yaml"
+            if not config_file.exists():
+                config_file = project_dir / "config.json"
+            
+            if config_file.exists():
+                try:
+                    config = ProjectConfig.load(str(config_file))
+                    configs[project_dir.name] = config
+                except Exception as e:
+                    print(f"⚠️  Failed to load {project_dir.name}: {e}")
+        
+        self._configs = configs
+        return configs
+    
+    def get(self, project_name: str) -> Optional[ProjectConfig]:
+        """Get config for a project.
+        
+        Args:
+            project_name: Project name
+            
+        Returns:
+            ProjectConfig or None
+        """
+        if project_name not in self._configs:
+            config_path = self.projects_dir / project_name / "config.yaml"
+            if not config_path.exists():
+                config_path = self.projects_dir / project_name / "config.json"
+            
+            if config_path.exists():
+                try:
+                    self._configs[project_name] = ProjectConfig.load(str(config_path))
+                except Exception as e:
+                    print(f"❌ Failed to load {project_name}: {e}")
+                    return None
+        
+        return self._configs.get(project_name)
+    
+    def list_projects(self) -> list:
+        """List all available projects.
+        
+        Returns:
+            List of project names
+        """
+        self.load_all()
+        return list(self._configs.keys())
+    
+    def list_enabled(self) -> list:
+        """List enabled projects.
+        
+        Returns:
+            List of enabled project names
+        """
+        self.load_all()
+        return [name for name, config in self._configs.items() if config.enabled]
 
 
-def load_content_plan(project_name: str) -> dict[str, Any]:
-    plan_path = Path("projects") / project_name / "content_plan.json"
-    if not plan_path.exists():
-        return {}
-
-    with plan_path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+if __name__ == "__main__":
+    # Test loading config
+    import sys
+    
+    if len(sys.argv) < 2:
+        # List all projects
+        manager = ConfigManager()
+        projects = manager.list_projects()
+        
+        print("\n📦 Available projects:")
+        for name in projects:
+            config = manager.get(name)
+            print(f"  - {config.name} ({config.content_type})")
+            print(f"    {config.description}")
+            if config.scheduling.get("enabled"):
+                print(f"    Schedule: {config.scheduling.get('cron')}")
+    else:
+        # Load specific project
+        project_name = sys.argv[1]
+        manager = ConfigManager()
+        config = manager.get(project_name)
+        
+        if config:
+            print(f"\n✅ Loaded: {config}")
+            print(f"\nConfiguration:")
+            print(json.dumps(config.to_dict(), indent=2, default=str))
+        else:
+            print(f"❌ Project not found: {project_name}")
