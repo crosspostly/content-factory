@@ -36,12 +36,22 @@ jobs:
         with:
           fetch-depth: 1
       
+      # Added setup-python CACHE for pip
       - name: Setup Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-          cache: 'pip'
+          cache: 'pip'  # ✅ Enables built-in pip caching
       
+      # Added Actions Cache for system apt packages (optional but faster)
+      - name: Cache System Packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-${{ hashFiles('**/*.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-
+
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
