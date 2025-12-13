@@ -178,7 +178,7 @@ class TestSynthesizeModes:
     
     def test_synthesize_invalid_mode(self, mock_config, sample_script_shorts):
         """Test synthesis with invalid mode."""
-        with pytest.raises(ValueError, match="Unknown mode"):
+        with pytest.raises(RuntimeError, match="Unknown mode"):
             tts_generator.synthesize(
                 mock_config,
                 sample_script_shorts,
