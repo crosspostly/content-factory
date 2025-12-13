@@ -10,6 +10,12 @@ import pytest
 from core.generators import video_renderer, tts_generator
 from core.utils.config_loader import load
 
+# Mock google.genai to prevent import errors
+import sys
+if 'google.genai' not in sys.modules:
+    sys.modules['google'] = MagicMock()
+    sys.modules['google.genai'] = MagicMock()
+
 
 class TestBackgroundGeneration:
     """Test background video/image generation."""
