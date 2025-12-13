@@ -49,6 +49,7 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
       
       - name: Cache system dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
@@ -65,7 +66,8 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -q
+          pip install --prefer-binary -r requirements.txt -q
+          echo "✅ Python dependencies installed"
       
       - name: Generate batch
         id: batch
@@ -133,7 +135,7 @@ jobs:
           echo "- **Format:** $FORMAT" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### 📈 Results" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Results" >> $GITHUB_STEP_SUMMARY
           echo "- **Successful:** $SUCCESS_COUNT" >> $GITHUB_STEP_SUMMARY
           
           FAILED=$((NUM_DAYS - SUCCESS_COUNT))
