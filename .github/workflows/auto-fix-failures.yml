@@ -52,6 +52,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || 'test-key-for-ci' }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY || 'test-key-for-ci' }}
+        continue-on-error: true
         run: python3 << 'SCRIPT_EOF'
 import os
 import re
@@ -245,7 +246,6 @@ else:
         f.write('false')
 print(f"{'='*60}\n")
 SCRIPT_EOF
-        continue-on-error: true
 
       - name: Check Fix Status
         id: fix-status
