@@ -3,12 +3,10 @@
 # Project-specific settings override these in projects/<project>/config.yaml
 
 generation:
-  # Primary and fallback models (auto-selected by model_router)
-  # UPDATED: Using gemini-2.5-flash which actually exists
+  # Primary and fallback models - ONLY WORKING MODELS
   primary_model: gemini-2.5-flash
   fallback_models:
-    - gemini-1.5-flash
-    - gemini-1.5-pro
+    - gemini-1.5-flash-001
   
   # Generation parameters
   temperature: 0.8
@@ -22,13 +20,6 @@ debugging:
   create_issue: true
   create_pr_if_possible: true
   max_log_lines: 3000
-  
-  # Ollama settings for debugging
-  ollama:
-    enabled: false
-    model: qwen2.5-coder:1.5b
-    cache_path: ~/.ollama
-    timeout_sec: 300
 
 audio:
   # Common audio settings
