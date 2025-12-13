@@ -14,6 +14,7 @@ import sys
 if 'google.genai' not in sys.modules:
     sys.modules['google'] = MagicMock()
     sys.modules['google.genai'] = MagicMock()
+    sys.modules['core.utils.model_router'] = MagicMock()
 
 
 class TestWorkflowPipelineMock:
