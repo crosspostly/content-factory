@@ -52,86 +52,84 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || 'test-key-for-ci' }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY || 'test-key-for-ci' }}
-        run: |
-          python3 << 'EOF'
-          import os
-          import re
-          import subprocess
-          import json
-          from pathlib import Path
-          import google.generativeai as genai
-          
-          api_key = os.getenv('GEMINI_API_KEY')
-          genai.configure(api_key=api_key)
-          
-          # GEMINI MODELS WHITELIST
-          ALLOWED_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']
-          CURRENT_MODEL = 'gemini-2.5-flash'
-          
-          MAX_ATTEMPTS = 10
-          SUCCESS = False
-          
-          for attempt in range(1, MAX_ATTEMPTS + 1):
-              print(f"\n{'='*60}")
-              print(f"🔧 ATTEMPT {attempt}/{MAX_ATTEMPTS}")
-              print(f"Model: {CURRENT_MODEL} (only 2.5 flash/lite allowed)")
-              print(f"{'='*60}\n")
-              
-              # Шаг 1: Извлечение ошибок
-              print("🔍 Extracting error information...")
-              error_info = []
-              failed_tests = []
-              error_messages = []
-              
-              # Из артефактов
-              for log_file in Path('workflow-artifacts').rglob('*.log'):
-                  try:
-                      with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                          content = f.read()
-                          for match in re.finditer(r'FAILED (.*?) -', content):
-                              failed_tests.append(match.group(1))
-                          for match in re.finditer(r'(AssertionError|ValueError|TypeError|AttributeError|ImportError|Exception)[:\s]+(.*?)(?=\n|$)', content):
-                              error_messages.append(f"{match.group(1)}: {match.group(2)[:200]}")
-                          traceback_matches = re.findall(r'(Traceback.*?)(?=\n[A-Z]|\nFAILED|$)', content, re.DOTALL)
-                          for tb in traceback_matches[:3]:
-                              error_info.append(tb[:500])
-                  except:
-                      pass
-              
-              # Из последнего запуска
-              if Path('pytest-last.log').exists():
-                  with open('pytest-last.log', 'r') as f:
-                      content = f.read()
-                      for match in re.finditer(r'FAILED (.*?) -', content):
-                          failed_tests.append(match.group(1))
-                      for match in re.finditer(r'(AssertionError|ValueError|TypeError)[:\s]+(.*?)(?=\n|$)', content):
-                          error_messages.append(f"{match.group(1)}: {match.group(2)[:200]}")
-              
-              if not failed_tests and not error_messages:
-                  print("⚠️ No errors found in logs")
-                  break
-              
-              print(f"❌ Found {len(set(failed_tests))} failed tests")
-              print(f"❌ Found {len(set(error_messages))} error messages")
-              
-              # Шаг 2: сборка контекст кода
-              code_files = []
-              for py_file in Path('core').rglob('*.py'):
-                  if '__pycache__' not in str(py_file):
-                      try:
-                          with open(py_file, 'r') as f:
-                              code_files.append({
-                                  'path': str(py_file),
-                                  'content': f.read()[:2000]
-                              })
-                      except:
-                          pass
-              
-              # Шаг 3: Запрос к Gemini
-              print(f"🤖 Calling Gemini 2.5 Flash for analysis...")
-              
-              prompt = f"""
-You are debugging Python test failures. Attempt {attempt}/{MAX_ATTEMPTS}.
+        run: python3 << 'SCRIPT_EOF'
+import os
+import re
+import subprocess
+import json
+from pathlib import Path
+import google.generativeai as genai
+
+api_key = os.getenv('GEMINI_API_KEY')
+genai.configure(api_key=api_key)
+
+# GEMINI MODELS WHITELIST
+ALLOWED_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']
+CURRENT_MODEL = 'gemini-2.5-flash'
+
+MAX_ATTEMPTS = 10
+SUCCESS = False
+
+for attempt in range(1, MAX_ATTEMPTS + 1):
+    print(f"\n{'='*60}")
+    print(f"🔧 ATTEMPT {attempt}/{MAX_ATTEMPTS}")
+    print(f"Model: {CURRENT_MODEL} (only 2.5 flash/lite allowed)")
+    print(f"{'='*60}\n")
+    
+    # Шаг 1: Извлечение ошибок
+    print("🔍 Extracting error information...")
+    error_info = []
+    failed_tests = []
+    error_messages = []
+    
+    # Из артефактов
+    for log_file in Path('workflow-artifacts').rglob('*.log'):
+        try:
+            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+                for match in re.finditer(r'FAILED (.*?) -', content):
+                    failed_tests.append(match.group(1))
+                for match in re.finditer(r'(AssertionError|ValueError|TypeError|AttributeError|ImportError|Exception)[:=\s]+(.*?)(?=\n|$)', content):
+                    error_messages.append(f"{match.group(1)}: {match.group(2)[:200]}")
+                traceback_matches = re.findall(r'(Traceback.*?)(?=\n[A-Z]|\nFAILED|$)', content, re.DOTALL)
+                for tb in traceback_matches[:3]:
+                    error_info.append(tb[:500])
+        except:
+            pass
+    
+    # Из последнего запуска
+    if Path('pytest-last.log').exists():
+        with open('pytest-last.log', 'r') as f:
+            content = f.read()
+            for match in re.finditer(r'FAILED (.*?) -', content):
+                failed_tests.append(match.group(1))
+            for match in re.finditer(r'(AssertionError|ValueError|TypeError)[:=\s]+(.*?)(?=\n|$)', content):
+                error_messages.append(f"{match.group(1)}: {match.group(2)[:200]}")
+    
+    if not failed_tests and not error_messages:
+        print("⚠️ No errors found in logs")
+        break
+    
+    print(f"❌ Found {len(set(failed_tests))} failed tests")
+    print(f"❌ Found {len(set(error_messages))} error messages")
+    
+    # Шаг 2: сборка контекст кода
+    code_files = []
+    for py_file in Path('core').rglob('*.py'):
+        if '__pycache__' not in str(py_file):
+            try:
+                with open(py_file, 'r') as f:
+                    code_files.append({
+                        'path': str(py_file),
+                        'content': f.read()[:2000]
+                    })
+            except:
+                pass
+    
+    # Шаг 3: Запрос к Gemini
+    print(f"🤖 Calling Gemini 2.5 Flash for analysis...")
+    
+    prompt = f"""You are debugging Python test failures. Attempt {attempt}/{MAX_ATTEMPTS}.
 
 **Failed Tests:**
 {chr(10).join(set(failed_tests[:10]))}
@@ -161,94 +159,92 @@ AFTER:
 REASON: [why this fixes it]
 ```
 
-Be aggressive. Fix everything you can identify.
-"""
-              
-              try:
-                  # ONLY gemini-2.5-flash - no other models
-                  model = genai.GenerativeModel(CURRENT_MODEL)
-                  response = model.generate_content(prompt)
-                  
-                  with open(f'gemini_analysis_attempt_{attempt}.md', 'w') as f:
-                      f.write(f"# Attempt {attempt}\n\n{response.text}")
-                  
-                  print(f"✅ Analysis complete\n")
-                  
-                  # Шаг 4: Применение фиксов
-                  print("🔧 Applying fixes...")
-                  
-                  # Парсим фиксы
-                  fix_pattern = r"FILE:\s*(.+?)\s*BEFORE:\s*```(?:python)?\s*(.+?)```\s*AFTER:\s*```(?:python)?\s*(.+?)```"
-                  fixes_applied = 0
-                  
-                  for match in re.finditer(fix_pattern, response.text, re.DOTALL | re.IGNORECASE):
-                      filepath = match.group(1).strip()
-                      before = match.group(2).strip()
-                      after = match.group(3).strip()
-                      
-                      if Path(filepath).exists():
-                          try:
-                              with open(filepath, 'r') as f:
-                                  file_content = f.read()
-                              
-                              if before in file_content:
-                                  new_content = file_content.replace(before, after, 1)
-                                  with open(filepath, 'w') as f:
-                                      f.write(new_content)
-                                  fixes_applied += 1
-                                  print(f"  ✅ Fixed {filepath}")
-                              else:
-                                  print(f"  ⚠️ Pattern not found in {filepath}")
-                          except Exception as e:
-                              print(f"  ❌ Error fixing {filepath}: {e}")
-                      else:
-                          print(f"  ⚠️ File not found: {filepath}")
-                  
-                  print(f"\n📦 Applied {fixes_applied} fixes\n")
-                  
-              except Exception as e:
-                  print(f"❌ Gemini error: {e}")
-                  continue
-              
-              # Шаг 5: Запуск тестов
-              print("🧪 Running tests...")
-              try:
-                  result = subprocess.run(
-                      ['pytest', 'tests/', '-v', '--tb=short', '-m', 'not slow', '--maxfail=5'],
-                      capture_output=True,
-                      text=True,
-                      timeout=300
-                  )
-                  
-                  with open('pytest-last.log', 'w') as f:
-                      f.write(result.stdout)
-                      f.write(result.stderr)
-                  
-                  if result.returncode == 0:
-                      print("✅ TESTS PASSED!")
-                      SUCCESS = True
-                      break
-                  else:
-                      print(f"❌ Tests still failing (exit code {result.returncode})")
-                      # Продолжаем цикл
-              except subprocess.TimeoutExpired:
-                  print("⚠️ Tests timeout")
-              except Exception as e:
-                  print(f"❌ Test run error: {e}")
-          
-          # Результат
-          print(f"\n{'='*60}")
-          if SUCCESS:
-              print("🎉 AUTO-FIX SUCCESSFUL!")
-              with open('FIX_SUCCESS', 'w') as f:
-                  f.write('true')
-          else:
-              print(f"🔴 FAILED AFTER {MAX_ATTEMPTS} ATTEMPTS")
-              with open('FIX_SUCCESS', 'w') as f:
-                  f.write('false')
-          print(f"{'='*60}\n")
-          
-          EOF
+Be aggressive. Fix everything you can identify."""
+    
+    try:
+        # ONLY gemini-2.5-flash - no other models
+        model = genai.GenerativeModel(CURRENT_MODEL)
+        response = model.generate_content(prompt)
+        
+        with open(f'gemini_analysis_attempt_{attempt}.md', 'w') as f:
+            f.write(f"# Attempt {attempt}\n\n{response.text}")
+        
+        print(f"✅ Analysis complete\n")
+        
+        # Шаг 4: Применение фиксов
+        print("🔧 Applying fixes...")
+        
+        # Парсим фиксы
+        fix_pattern = r"FILE:\s*(.+?)\s*BEFORE:\s*```(?:python)?\s*(.+?)```\s*AFTER:\s*```(?:python)?\s*(.+?)```"
+        fixes_applied = 0
+        
+        for match in re.finditer(fix_pattern, response.text, re.DOTALL | re.IGNORECASE):
+            filepath = match.group(1).strip()
+            before = match.group(2).strip()
+            after = match.group(3).strip()
+            
+            if Path(filepath).exists():
+                try:
+                    with open(filepath, 'r') as f:
+                        file_content = f.read()
+                    
+                    if before in file_content:
+                        new_content = file_content.replace(before, after, 1)
+                        with open(filepath, 'w') as f:
+                            f.write(new_content)
+                        fixes_applied += 1
+                        print(f"  ✅ Fixed {filepath}")
+                    else:
+                        print(f"  ⚠️ Pattern not found in {filepath}")
+                except Exception as e:
+                    print(f"  ❌ Error fixing {filepath}: {e}")
+            else:
+                print(f"  ⚠️ File not found: {filepath}")
+        
+        print(f"\n📦 Applied {fixes_applied} fixes\n")
+        
+    except Exception as e:
+        print(f"❌ Gemini error: {e}")
+        continue
+    
+    # Шаг 5: Запуск тестов
+    print("🧪 Running tests...")
+    try:
+        result = subprocess.run(
+            ['pytest', 'tests/', '-v', '--tb=short', '-m', 'not slow', '--maxfail=5'],
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        
+        with open('pytest-last.log', 'w') as f:
+            f.write(result.stdout)
+            f.write(result.stderr)
+        
+        if result.returncode == 0:
+            print("✅ TESTS PASSED!")
+            SUCCESS = True
+            break
+        else:
+            print(f"❌ Tests still failing (exit code {result.returncode})")
+            # Продолжаем цикл
+    except subprocess.TimeoutExpired:
+        print("⚠️ Tests timeout")
+    except Exception as e:
+        print(f"❌ Test run error: {e}")
+
+# Результат
+print(f"\n{'='*60}")
+if SUCCESS:
+    print("🎉 AUTO-FIX SUCCESSFUL!")
+    with open('FIX_SUCCESS', 'w') as f:
+        f.write('true')
+else:
+    print(f"🔴 FAILED AFTER {MAX_ATTEMPTS} ATTEMPTS")
+    with open('FIX_SUCCESS', 'w') as f:
+        f.write('false')
+print(f"{'='*60}\n")
+SCRIPT_EOF
         continue-on-error: true
 
       - name: Check Fix Status
