@@ -13,9 +13,9 @@ on:
 jobs:
   auto-fix:
     runs-on: ubuntu-latest
-    name: Gemini Auto-Fix
+    name: Gemini Auto-Fix (Retry Loop)
     if: github.event.workflow_run.conclusion == 'failure'
-    timeout-minutes: 20
+    timeout-minutes: 45
     permissions:
       contents: write
       pull-requests: write
@@ -33,6 +33,11 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -q google-generativeai -r requirements.txt
+
       - name: Download Test Logs
         uses: actions/download-artifact@v4
         with:
@@ -41,211 +46,216 @@ jobs:
           path: workflow-artifacts
         continue-on-error: true
 
-      - name: Extract Error Information
-        id: extract
+      - name: Auto-Fix Loop (Up to 10 Attempts)
+        if: env.GEMINI_API_KEY != ''
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || 'test-key-for-ci' }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY || 'test-key-for-ci' }}
         run: |
           python3 << 'EOF'
           import os
           import re
-          from pathlib import Path
-          
-          # Ищем логи тестов
-          error_info = []
-          failed_tests = []
-          error_messages = []
-          
-          for log_file in Path('workflow-artifacts').rglob('*.log'):
-              try:
-                  with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                      content = f.read()
-                      
-                      # Ищем FAILED тесты
-                      for match in re.finditer(r'FAILED (.*?) -', content):
-                          failed_tests.append(match.group(1))
-                      
-                      # Ищем ошибки
-                      for match in re.finditer(r'(AssertionError|ValueError|TypeError|AttributeError|ImportError)[:\s]+(.*?)(?=\n|$)', content):
-                          error_messages.append(f"{match.group(1)}: {match.group(2)[:200]}")
-                      
-                      # Ищем трейсбеки
-                      traceback_matches = re.findall(r'(Traceback.*?)(?=\n[A-Z]|\nFAILED|$)', content, re.DOTALL)
-                      for tb in traceback_matches[:3]:  # Первые 3 трейсбека
-                          error_info.append(tb[:500])
-              except Exception as e:
-                  print(f"Error reading {log_file}: {e}")
-          
-          # Сохраняем результаты
-          with open('error_analysis.txt', 'w') as f:
-              f.write("FAILED TESTS:\n")
-              f.write("\n".join(set(failed_tests[:5])) + "\n\n")
-              
-              f.write("ERROR MESSAGES:\n")
-              f.write("\n".join(set(error_messages[:5])) + "\n\n")
-              
-              f.write("TRACEBACKS:\n")
-              f.write("\n".join(error_info[:3]) + "\n")
-          
-          print(f"Extracted {len(failed_tests)} failed tests")
-          print(f"Found {len(error_messages)} error messages")
-          
-          # Экспортируем для использования в следующих шагах
-          with open('$GITHUB_OUTPUT', 'a') as f:
-              f.write(f"failed_count={len(failed_tests)}\n")
-              f.write(f"has_errors={len(error_messages) > 0}\n")
-          
-          EOF
-
-      - name: Call Gemini CLI for Analysis
-        if: steps.extract.outputs.has_errors == 'true' && env.GEMINI_API_KEY != ''
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          pip install -q google-generativeai
-          
-          python3 << 'EOF'
-          import os
+          import subprocess
           import json
+          from pathlib import Path
           import google.generativeai as genai
           
           api_key = os.getenv('GEMINI_API_KEY')
           genai.configure(api_key=api_key)
           
-          # Читаем информацию об ошибках
-          with open('error_analysis.txt', 'r') as f:
-              error_analysis = f.read()
+          MAX_ATTEMPTS = 10
+          SUCCESS = False
           
-          # Читаем исходный код для контекста
-          code_files = []
-          from pathlib import Path
-          for py_file in Path('core').rglob('*.py'):
-              if py_file.name not in ['__pycache__', '.pyc']:
+          for attempt in range(1, MAX_ATTEMPTS + 1):
+              print(f"\n{'='*60}")
+              print(f"🔧 ATTEMPT {attempt}/{MAX_ATTEMPTS}")
+              print(f"{'='*60}\n")
+              
+              # Шаг 1: Извлечение ошибок
+              print("🔍 Extracting error information...")
+              error_info = []
+              failed_tests = []
+              error_messages = []
+              
+              # Из артефактов
+              for log_file in Path('workflow-artifacts').rglob('*.log'):
                   try:
-                      with open(py_file, 'r') as f:
-                          code_files.append({
-                              'path': str(py_file),
-                              'content': f.read()[:1500]  # Первые 1500 символов
-                          })
+                      with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                          content = f.read()
+                          for match in re.finditer(r'FAILED (.*?) -', content):
+                              failed_tests.append(match.group(1))
+                          for match in re.finditer(r'(AssertionError|ValueError|TypeError|AttributeError|ImportError|Exception)[:\s]+(.*?)(?=\n|$)', content):
+                              error_messages.append(f"{match.group(1)}: {match.group(2)[:200]}")
+                          traceback_matches = re.findall(r'(Traceback.*?)(?=\n[A-Z]|\nFAILED|$)', content, re.DOTALL)
+                          for tb in traceback_matches[:3]:
+                              error_info.append(tb[:500])
                   except:
                       pass
-          
-          code_context = json.dumps(code_files[:5], indent=2)  # Top 5 files
-          
-          # Формируем промпт для Gemini
-          prompt = f"""
-You are an expert Python developer debugging test failures.
-
-Analyze the following test failure and provide specific code fixes:
-
-**Error Analysis:**
-{error_analysis}
-
-**Code Context (Top files):**
-{code_context}
-
-**Your Task:**
-1. Identify root cause of failures
-2. Provide EXACT code fixes (show before/after)
-3. Specify which files to modify
-4. Include line numbers where applicable
-5. Be concise and actionable
-
-Format your response as:
-```
-ROOT CAUSE:
-[explanation]
-
-FIXES:
-1. File: [path]
-   Line: [number]
-   Before: [code]
-   After: [code]
-   Reason: [why]
-```
-"""
-          
-          model = genai.GenerativeModel('gemini-2.5-pro')
-          response = model.generate_content(prompt)
-          
-          # Сохраняем анализ
-          with open('gemini_fixes.md', 'w') as f:
-              f.write(f"# Gemini Auto-Fix Analysis\n\n")
-              f.write(f"Generated for: ${{ github.event.workflow_run.head_branch }}\n")
-              f.write(f"Commit: ${{ github.event.workflow_run.head_commit.message }}\n\n")
-              f.write(response.text)
-          
-          print("✅ Gemini Analysis Complete")
-          print(response.text)
-          
-          EOF
-        continue-on-error: true
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -q -r requirements.txt
-        continue-on-error: true
-
-      - name: Auto-Apply Fixes
-        if: hashFiles('gemini_fixes.md') != ''
-        run: |
-          python3 << 'EOF'
-          import re
-          from pathlib import Path
-          
-          with open('gemini_fixes.md', 'r') as f:
-              content = f.read()
-          
-          # Ищем блоки с фиксами
-          fix_pattern = r"File:\s*(.+?)\s*\n.*?Before:\s*```(.+?)```\s*After:\s*```(.+?)```"
-          
-          for match in re.finditer(fix_pattern, content, re.DOTALL):
-              filepath = match.group(1).strip()
-              before = match.group(2).strip()
-              after = match.group(3).strip()
               
-              # Проверяем что файл существует
-              if Path(filepath).exists():
-                  try:
-                      with open(filepath, 'r') as f:
-                          file_content = f.read()
+              # Из последнего запуска
+              if Path('pytest-last.log').exists():
+                  with open('pytest-last.log', 'r') as f:
+                      content = f.read()
+                      for match in re.finditer(r'FAILED (.*?) -', content):
+                          failed_tests.append(match.group(1))
+                      for match in re.finditer(r'(AssertionError|ValueError|TypeError)[:\s]+(.*?)(?=\n|$)', content):
+                          error_messages.append(f"{match.group(1)}: {match.group(2)[:200]}")
+              
+              if not failed_tests and not error_messages:
+                  print("⚠️ No errors found in logs")
+                  break
+              
+              print(f"❌ Found {len(set(failed_tests))} failed tests")
+              print(f"❌ Found {len(set(error_messages))} error messages")
+              
+              # Шаг 2: Собираем контекст кода
+              code_files = []
+              for py_file in Path('core').rglob('*.py'):
+                  if '__pycache__' not in str(py_file):
+                      try:
+                          with open(py_file, 'r') as f:
+                              code_files.append({
+                                  'path': str(py_file),
+                                  'content': f.read()[:2000]
+                              })
+                      except:
+                          pass
+              
+              # Шаг 3: Запрос к Gemini
+              print("🤖 Calling Gemini 2.0 Flash for analysis...")
+              
+              prompt = f"""
+You are debugging Python test failures. Attempt {attempt}/{MAX_ATTEMPTS}.
+
+**Failed Tests:**
+{chr(10).join(set(failed_tests[:10]))}
+
+**Error Messages:**
+{chr(10).join(set(error_messages[:10]))}
+
+**Tracebacks:**
+{chr(10).join(error_info[:2])}
+
+**Code Context (sample files):**
+{json.dumps(code_files[:3], indent=2)}
+
+**Task:**
+1. Identify the EXACT root cause
+2. Provide PRECISE code fixes with full context
+3. Show complete file paths
+4. Include exact line replacements
+
+Format:
+```
+FILE: path/to/file.py
+BEFORE:
+[exact code to replace]
+AFTER:
+[fixed code]
+REASON: [why this fixes it]
+```
+
+Be aggressive. Fix everything you can identify.
+"""
+              
+              try:
+                  model = genai.GenerativeModel('gemini-2.0-flash-exp')
+                  response = model.generate_content(prompt)
+                  
+                  with open(f'gemini_analysis_attempt_{attempt}.md', 'w') as f:
+                      f.write(f"# Attempt {attempt}\n\n{response.text}")
+                  
+                  print(f"✅ Analysis complete\n")
+                  
+                  # Шаг 4: Применение фиксов
+                  print("🔧 Applying fixes...")
+                  
+                  # Парсим фиксы
+                  fix_pattern = r"FILE:\s*(.+?)\s*BEFORE:\s*```(?:python)?\s*(.+?)```\s*AFTER:\s*```(?:python)?\s*(.+?)```"
+                  fixes_applied = 0
+                  
+                  for match in re.finditer(fix_pattern, response.text, re.DOTALL | re.IGNORECASE):
+                      filepath = match.group(1).strip()
+                      before = match.group(2).strip()
+                      after = match.group(3).strip()
                       
-                      # Пытаемся применить фикс
-                      if before in file_content:
-                          new_content = file_content.replace(before, after)
-                          with open(filepath, 'w') as f:
-                              f.write(new_content)
-                          print(f"✅ Applied fix to {filepath}")
+                      if Path(filepath).exists():
+                          try:
+                              with open(filepath, 'r') as f:
+                                  file_content = f.read()
+                              
+                              if before in file_content:
+                                  new_content = file_content.replace(before, after, 1)
+                                  with open(filepath, 'w') as f:
+                                      f.write(new_content)
+                                  fixes_applied += 1
+                                  print(f"  ✅ Fixed {filepath}")
+                              else:
+                                  print(f"  ⚠️ Pattern not found in {filepath}")
+                          except Exception as e:
+                              print(f"  ❌ Error fixing {filepath}: {e}")
                       else:
-                          print(f"⚠️ Could not find exact match in {filepath}")
-                  except Exception as e:
-                      print(f"❌ Error fixing {filepath}: {e}")
-              else:
-                  print(f"⚠️ File not found: {filepath}")
+                          print(f"  ⚠️ File not found: {filepath}")
+                  
+                  print(f"\n📦 Applied {fixes_applied} fixes\n")
+                  
+              except Exception as e:
+                  print(f"❌ Gemini error: {e}")
+                  continue
+              
+              # Шаг 5: Запуск тестов
+              print("🧪 Running tests...")
+              try:
+                  result = subprocess.run(
+                      ['pytest', 'tests/', '-v', '--tb=short', '-m', 'not slow', '--maxfail=5'],
+                      capture_output=True,
+                      text=True,
+                      timeout=300
+                  )
+                  
+                  with open('pytest-last.log', 'w') as f:
+                      f.write(result.stdout)
+                      f.write(result.stderr)
+                  
+                  if result.returncode == 0:
+                      print("✅ TESTS PASSED!")
+                      SUCCESS = True
+                      break
+                  else:
+                      print(f"❌ Tests still failing (exit code {result.returncode})")
+                      # Продолжаем цикл
+              except subprocess.TimeoutExpired:
+                  print("⚠️ Tests timeout")
+              except Exception as e:
+                  print(f"❌ Test run error: {e}")
+          
+          # Результат
+          print(f"\n{'='*60}")
+          if SUCCESS:
+              print("🎉 AUTO-FIX SUCCESSFUL!")
+              with open('FIX_SUCCESS', 'w') as f:
+                  f.write('true')
+          else:
+              print(f"🔴 FAILED AFTER {MAX_ATTEMPTS} ATTEMPTS")
+              with open('FIX_SUCCESS', 'w') as f:
+                  f.write('false')
+          print(f"{'='*60}\n")
           
           EOF
         continue-on-error: true
 
-      - name: Run Tests Again
-        env:
-          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || 'test-key-for-ci' }}
-          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY || 'test-key-for-ci' }}
+      - name: Check Fix Status
+        id: fix-status
         run: |
-          pytest tests/ -v --tb=short -m "not slow" --maxfail=5 2>&1 | tee pytest-after-fix.log || true
-        continue-on-error: true
-
-      - name: Check if Tests Pass Now
-        id: test-status
-        run: |
-          if grep -q "passed" pytest-after-fix.log; then
-            echo "TESTS_FIXED=true" >> $GITHUB_OUTPUT
-            grep "passed" pytest-after-fix.log
+          if [ -f "FIX_SUCCESS" ] && [ "$(cat FIX_SUCCESS)" = "true" ]; then
+            echo "success=true" >> $GITHUB_OUTPUT
           else
-            echo "TESTS_FIXED=false" >> $GITHUB_OUTPUT
+            echo "success=false" >> $GITHUB_OUTPUT
           fi
-        continue-on-error: true
 
       - name: Create Fix Branch & PR
-        if: steps.test-status.outputs.TESTS_FIXED == 'true'
+        if: steps.fix-status.outputs.success == 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -254,76 +264,80 @@ FIXES:
             const { execSync } = require('child_process');
             
             try {
-              // Конфигурируем git
               execSync('git config user.email "github-actions[bot]@github.com"');
               execSync('git config user.name "github-actions[bot]"');
               
-              // Создаём ветку
-              const timestamp = new Date().getTime();
               const branchName = `gemini-auto-fix-${context.runId}`;
               
               execSync(`git checkout -b ${branchName}`);
               execSync('git add -A');
-              execSync('git commit -m "🤖 Auto-fix: Gemini AI fixes test failures\n\nApplied fixes from Gemini CLI analysis to resolve failing tests."');
+              execSync('git commit -m "🤖 Auto-fix: Gemini 2.0 Flash resolved test failures\n\nApplied fixes after iterative analysis and testing."');
               execSync(`git push origin ${branchName}`);
               
-              // Создаём PR
-              const geminiAnalysis = fs.readFileSync('gemini_fixes.md', 'utf8');
-              const testLogs = fs.readFileSync('pytest-after-fix.log', 'utf8').slice(-500);
+              // Читаем все анализы
+              let allAnalysis = '';
+              for (let i = 1; i <= 10; i++) {
+                  const file = `gemini_analysis_attempt_${i}.md`;
+                  if (fs.existsSync(file)) {
+                      allAnalysis += fs.readFileSync(file, 'utf8') + '\n\n---\n\n';
+                  }
+              }
               
               const pr = await github.rest.pulls.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: '🤖 [AUTO-FIX] Test failures fixed by Gemini AI',
+                title: '✅ [AUTO-FIX] Tests fixed by Gemini 2.0 Flash',
                 head: branchName,
-                base: context.ref.replace('refs/heads/', ''),
-                body: `## Automated Fix by Gemini AI\n\n### Analysis\n${geminiAnalysis}\n\n### Test Results After Fix\n\`\`\`\n${testLogs}\n\`\`\`\n\n---\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Triggered by:** @${{ github.event.workflow_run.actor }}`,
-                labels: ['🤖 auto-generated', '✅ auto-fix', 'tests']
+                base: '${{ github.event.workflow_run.head_branch }}',
+                body: `## 🎉 Automated Fix Success\n\n**Gemini 2.0 Flash** successfully analyzed and fixed the failing tests through iterative debugging.\n\n### Analysis History\n${allAnalysis.slice(0, 5000)}\n\n---\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Fixed by:** Gemini Auto-Fix Workflow`,
+                labels: ['✅ auto-fix', '🤖 ai-generated']
               });
               
               console.log(`✅ PR Created: #${pr.data.number}`);
               
-              // Оставляем комментарий
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: pr.data.number,
-                body: `🚀 **Gemini AI Auto-Fix Successful!**\n\nThe failing tests have been analyzed and fixed automatically.\nPlease review the changes and merge if everything looks good!`
+                body: `🚀 Ready to merge! All tests are now passing.`
               });
             } catch (error) {
-              console.log(`⚠️ Error creating PR: ${error.message}`);
+              console.log(`❌ Error: ${error.message}`);
             }
-        continue-on-error: true
 
-      - name: Create Failure Issue
-        if: steps.test-status.outputs.TESTS_FIXED == 'false'
+      - name: Create Frozen Issue
+        if: steps.fix-status.outputs.success == 'false'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const geminiAnalysis = fs.readFileSync('gemini_fixes.md', 'utf8').slice(0, 2000);
+            
+            let allAnalysis = '';
+            for (let i = 1; i <= 10; i++) {
+                const file = `gemini_analysis_attempt_${i}.md`;
+                if (fs.existsSync(file)) {
+                    allAnalysis += `## Attempt ${i}\n${fs.readFileSync(file, 'utf8')}\n\n`;
+                }
+            }
             
             const issue = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `🔴 [NEEDS MANUAL FIX] Test failures - Gemini suggestions available`,
-              body: `## Automated Analysis (Could Not Auto-Fix)\n\n${geminiAnalysis}\n\n### Next Steps\n- Review Gemini suggestions above\n- Apply changes manually\n- Re-run tests\n\n---\n**Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}`,
-              labels: ['🔴 manual-fix', 'bug', 'help wanted'],
+              title: `🧊 [FROZEN] Auto-fix failed after 10 attempts - Manual intervention required`,
+              body: `## 🔴 Gemini Auto-Fix Failed\n\nAfter 10 iterative attempts, Gemini 2.0 Flash could not automatically resolve the test failures.\n\n### All Attempts\n${allAnalysis.slice(0, 10000)}\n\n---\n\n### Manual Action Required\n👀 Review the analysis above and apply fixes manually.\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Workflow:** ${{ github.event.workflow_run.name }}\n**Branch:** ${{ github.event.workflow_run.head_branch }}`,
+              labels: ['🧊 frozen', '🔴 manual-fix', 'bug', 'help wanted'],
               assignees: ['${{ github.event.workflow_run.actor }}']
             });
             
             console.log(`📝 Issue created: #${issue.data.number}`);
-        continue-on-error: true
 
       - name: Upload Analysis Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gemini-auto-fix-${{ github.run_number }}
+          name: gemini-auto-fix-attempts-${{ github.run_number }}
           path: |
-            gemini_fixes.md
-            error_analysis.txt
-            pytest-after-fix.log
-          retention-days: 7
-        continue-on-error: true
+            gemini_analysis_attempt_*.md
+            pytest-last.log
+          retention-days: 14
