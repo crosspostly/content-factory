@@ -1,337 +1,360 @@
-# 🤖 Copilot Auto-Fix Debugging Workflow
+# 🤖 Qwen на Ollama: Auto-Fix Debugging Workflow
 
-## How It Works
+## Как это работает
 
-Your project now has an **automated debugging and fixing system** that uses GitHub Copilot to analyze failing tests and create fix PRs.
+Твой проект теперь имеет **автоматизированную систему отладки**, которая использует **Qwen на Ollama** для анализа падающих тестов и **автоматического создания исправлений**.
 
-### Flow Diagram
+### Диаграмма Flow
 
 ```
-┌─────────────────────┐
-│  tests.yml FAILS    │
-│  (or part1-test.yml)│
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────────────┐
-│ auto-fix-agent.yml (1)      │
-│ - Detects failure           │
-│ - Fetches error logs        │
-│ - Creates GitHub Issue      │
-└──────────┬──────────────────┘
-           │
-           ▼
-┌──────────────────────────────────┐
-│ copilot-fix.yml (2)              │
-│ - Triggered by issue creation    │
-│ - Analyzes error type            │
-│ - Generates fix analysis         │
-│ - Creates fix PR with analysis   │
-└──────────┬─────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────┐
-│ You review the PR:               │
-│ - Check proposed changes         │
-│ - Test locally if needed         │
-│ - Merge when satisfied           │
-└──────────────────────────────────┘
+┌──────────────────────────────────────┐
+│  tests.yml ПАДАЕТ                    │
+│  (или part1-test.yml)                │
+└──────────────────────┬───────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────────────────┐
+│ auto-fix-agent.yml                                       │
+│ ✓ Детектирует падение                                   │
+│ ✓ Скачивает логи workflow                               │
+│ ✓ **Запускает Ollama + Qwen 1.5B**                      │
+│ ✓ **Анализирует ошибки с LLM**                          │
+│ ✓ **Генерирует код для фиксинга**                       │
+│ ✓ Создает GitHub Issue с анализом                       │
+└──────────────────────┬───────────────────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────────────────┐
+│ Qwen 2.5 Coder на Ollama                                │
+│ ✓ Анализирует ошибки в логах                            │
+│ ✓ Определяет root cause                                 │
+│ ✓ Генерирует решение (шаги + код)                       │
+│ ✓ Оценивает, возможен ли auto-fix                       │
+└──────────────────────┬───────────────────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────────────────┐
+│ Если auto_fix_possible = true                           │
+│ ✓ Создает новую ветку: auto-fix/run-XXX                │
+│ ✓ Применяет код фиксинга                                │
+│ ✓ Коммитит с сообщением                                 │
+│ ✓ Пушит ветку                                           │
+│ ✓ **Создает PR с автофиксом**                           │
+└──────────────────────┬───────────────────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────────────────┐
+│ Ты (человек)                                            │
+│ ✓ Смотришь Issue с анализом Qwen                       │
+│ ✓ Смотришь PR с предложенным фиксом                     │
+│ ✓ Проверяешь - работает ли                              │
+│ ✓ Мержишь если всё ок                                   │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🔍 What Copilot Does
+## 🔍 Что Qwen делает
 
-### 1. **Failure Detection** (`auto-fix-agent.yml`)
+### 1. **Анализ ошибок с Qwen** 
 
-When `tests.yml` or `part1-test.yml` **fails**:
+Когда `tests.yml` **падает**:
 
-✅ Automatically detects the failure  
-✅ Downloads workflow artifacts  
-✅ Extracts error logs  
-✅ **Creates a GitHub Issue** with:
-   - Error summary
-   - Context (last 50 lines of logs)
-   - Link to failing workflow run
-   - Labels: `bug`, `auto-generated`, `ai-analyzed`
+✅ Ollama запускается с Qwen 2.5 Coder моделью (1.5B параметров)  
+✅ Qwen читает и анализирует логи workflow  
+✅ Определяет:
+   - Что именно сломалось (problem)
+   - Почему это произошло (root_cause)
+   - Серьезность (severity: critical/high/medium/low)
+   - Шаги для решения (solution_steps)
+   - **Конкретный код для фиксинга** (code_fix)
+   - Какой файл нужно изменить (file_to_modify)
+   - Возможен ли автоматический фикс (auto_fix_possible)
 
-**Example Issue:**
+### 2. **Создание Issue с анализом**
+
+✅ GitHub Issue создается с полным анализом Qwen
+✅ Issue содержит:
+   - Problem & Root Cause (от Qwen)
+   - Solution Steps (от Qwen)
+   - Technical Task (от Qwen)
+   - Suggested Code Fix (реальный код от Qwen!)
+   - Severity уровень
+   - Ссылка на workflow run
+
+**Пример:**
 ```
-🔴 [tests.yml #123] Workflow failed
+🔴 [HIGH] ModuleNotFoundError: No module named 'video_processor'
 
 Workflow: tests.yml
 Run: #123
 Branch: main
-Commit: abc123def...
 
-Error Summary:
-ModuleNotFoundError: No module named 'video_processor'
+Problem:
+Модуль video_processor не найден при импорте
 
-Error Context (Last 50 lines):
-[...last 50 lines of workflow output...]
+Root Cause:
+В requirements.txt отсутствует зависимость video_processor
+или она не установлена в виртуальное окружение
+
+Solution Steps:
+- Добавить video_processor в requirements.txt
+- Перестроить окружение с pip install -r requirements.txt
+- Запустить тесты заново
+
+Suggested Code Fix:
+```python
+print("video_processor")  # Добавить в requirements.txt
+```
 ```
 
-### 2. **Fix Generation** (`copilot-fix.yml`)
+### 3. **Автоматическое создание PR с фиксом**
 
-When issue is created with `auto-generated` label:
+Если Qwen определит, что фикс возможен (`auto_fix_possible: true`):
 
-✅ Analyzes the issue  
-✅ Determines fix type (Docker, Workflow, Tests, Imports, etc.)  
-✅ Creates a **new branch** named `copilot-fix/issue-XXX`  
-✅ Generates analysis document  
-✅ **Creates a Draft PR** with:
-   - Fix type identification
-   - Analysis documentation
-   - Review checklist
-   - Labels: `auto-fix`, `copilot`, `ai-generated`
+✅ Создается новая ветка `auto-fix/run-XXX`  
+✅ Применяется код фиксинга (реально изменяется файл)  
+✅ Делается коммит с сообщением  
+✅ Пушится ветка в репо  
+✅ **Создается PR с автофиксом**
 
-**Example PR:**
+**Пример PR:**
 ```
-[Copilot] Auto-fix for issue #42
+🔧 Auto-Fix: ModuleNotFoundError: No module named 'video_processor'
 
-Automatically created fix for: #42
+Issue: ModuleNotFoundError occurred
+Root Cause: Missing dependency in requirements.txt
+Severity: high
+AI Model: qwen
 
-Fix Type: Test suite
+Solution:
+- Add missing dependency to requirements.txt
+- Reinstall dependencies
+- Tests will pass after merge
 
-Changes Made:
-- Analyzed workflow/test failure
-- Generated code fixes
-- Added analysis documentation
+Changed Files:
+- requirements.txt
 
-Review Checklist:
-- [ ] Review proposed changes
-- [ ] Run tests locally
-- [ ] Verify fix resolves issue
-- [ ] Merge when ready
+Workflow Run:
+[tests.yml #123](link-to-run)
+
+---
+Created by Auto-Fix Agent 🤖 with Qwen AI
+Please review and merge manually
 ```
 
 ---
 
-## ✅ How to Use
+## ✅ Как это использовать
 
-### Option 1: Automatic (Default)
+### Автоматическое (Стандартное)
 
-Just push and let it happen:
+Просто пуши код и забудь:
 
 ```bash
-# 1. Make changes
+# 1. Делаешь изменения
 git add .
 git commit -m "feat: add new feature"
 git push
 
-# 2. If tests fail automatically:
-#    - Issue is created
-#    - Fix PR is generated
-#    - You get notified
+# 2. Если тесты падают:
+#    - Qwen анализирует в течение ~3-5 минут
+#    - Issue создается с полным анализом
+#    - PR с фиксом создается (если возможно)
+#    - Ты получаешь уведомление
 ```
 
-### Option 2: Manual Trigger
-
-Manually trigger fix generation for any existing issue:
+### Мониторинг
 
 ```bash
-# Via GitHub CLI
-gh workflow run copilot-fix.yml -f issue_number=42
+# Смотри последние запуски auto-fix-agent
+gh run list --workflow auto-fix-agent.yml --limit 5
 
-# Or via GitHub UI:
-# Actions > Copilot Auto-Fix PR > Run workflow > Enter issue number
-```
-
----
-
-## 🔍 What to Check
-
-Before merging any auto-generated fix:
-
-### Issue Checklist
-- [ ] Is the error clearly identified?
-- [ ] Are error logs included?
-- [ ] Is the context sufficient for understanding?
-- [ ] Does it reference the failing workflow?
-
-### PR Checklist
-- [ ] Does the fix type match the error?
-- [ ] Are the proposed changes minimal and focused?
-- [ ] Do tests pass with the changes?
-- [ ] Is the code quality acceptable?
-- [ ] Any breaking changes?
-
-### Testing
-
-```bash
-# Fetch the fix PR branch
-git fetch origin copilot-fix/issue-XXX
-git checkout copilot-fix/issue-XXX
-
-# Test locally
-python -m pytest tests/
-# or
-docker-compose up --build
-
-# If it works, merge!
-git checkout main
-git merge copilot-fix/issue-XXX
-git push
-```
-
----
-
-## 🚨 Troubleshooting
-
-### Issue Not Created
-
-```bash
-# Check auto-fix-agent.yml logs
-gh run list --workflow auto-fix-agent.yml --limit 3
-gh run view <RUN_ID> --log
-```
-
-**Common causes:**
-- Permissions missing (check `permissions:` in workflow)
-- `gh` CLI not authenticated
-- No errors in test output
-
-### PR Not Created
-
-```bash
-# Check copilot-fix.yml logs
-gh run list --workflow copilot-fix.yml --limit 3
-gh run view <RUN_ID> --log
-```
-
-**Common causes:**
-- Issue doesn't have `auto-generated` label
-- Branch already exists
-- Permissions insufficient
-
-### Fix Doesn't Work
-
-1. Check the error logs in the issue again
-2. Look at `FIX_ANALYSIS.md` in the PR
-3. Comment on the PR with more context
-4. Close the PR and create a new issue if needed
-
----
-
-## 📋 Workflow Status
-
-Check workflow status anytime:
-
-```bash
-# List recent runs
-gh run list --workflow auto-fix-agent.yml
-gh run list --workflow copilot-fix.yml
-gh run list --workflow tests.yml
-
-# View specific run
+# Смотри логи конкретного запуска
 gh run view <RUN_ID> --log
 
-# List recent issues/PRs
+# Смотри созданные Issues и PRs
 gh issue list --label auto-generated
 gh pr list --label auto-fix
 ```
 
 ---
 
-## 🎯 What Copilot Understands
+## 📋 Перед мержем PR
 
-✅ **It knows to:**
-- Listen for failing workflows
-- Extract and parse error logs
-- Identify error patterns
-- Determine what type of fix is needed
-- Create appropriate GitHub issues
-- Generate fix PRs with context
-- Add helpful comments
-- Label issues and PRs appropriately
+### Что проверить в Issue
 
-✅ **It does this when:**
-- `tests.yml` fails
-- `part1-test.yml` fails  
-- `tests-docker.yml` fails
-- Any workflow completes with `failure` status
+- [x] Qwen правильно определил ошибку?
+- [x] Root cause указан верный?
+- [x] Solution steps логичные?
+- [x] Severity соответствует проблеме?
+- [x] Code fix выглядит адекватно?
 
-✅ **It stops when:**
-- Tests pass
-- Workflow succeeds
-- You manually close an issue
-- You reject a PR
+### Что проверить в PR
 
----
+- [x] Изменения минимальные и сфокусированные?
+- [x] Файлы которые нужно изменить - указаны верно?
+- [x] Тесты проходят с этими изменениями?
+- [x] Нет breaking changes?
+- [x] Код качественный?
 
-## 🔧 Configuration
+### Тестирование
 
-Both workflows are fully configured in:
+```bash
+# Скачай ветку с фиксом
+git fetch origin auto-fix/run-XXX
+git checkout auto-fix/run-XXX
 
-- `.github/workflows/auto-fix-agent.yml` — Detects failures, creates issues
-- `.github/workflows/copilot-fix.yml` — Analyzes issues, creates fix PRs
+# Запусти тесты локально
+python -m pytest tests/
 
-**Permissions set:**
-- `contents: write` — Can push branches and commits
-- `actions: read` — Can read workflow runs
-- `issues: write` — Can create/edit issues
-- `pull-requests: write` — Can create/edit PRs
+# Или в Docker
+docker-compose up --build
 
-**Labels used:**
-- `auto-generated` — Issue was auto-created
-- `ai-analyzed` — Copilot analyzed it
-- `auto-fix` — PR is auto-generated fix
-- `in-progress` — Issue being worked on
-- `has-fix` — Fix PR exists
-
----
-
-## ❓ FAQ
-
-**Q: Will this automatically fix everything?**  
-A: No, it analyzes failures and creates PRs. You still review and merge manually.
-
-**Q: What if the fix is wrong?**  
-A: It's a draft PR, so just don't merge. You can close it and create a new issue.
-
-**Q: Can I disable this?**  
-A: Yes, delete the workflows or disable them in GitHub UI. Or turn off issue creation.
-
-**Q: How long does it take?**  
-A: Usually 1-2 minutes from failure to issue creation, then 2-5 minutes for fix PR.
-
-**Q: Does it need my Copilot subscription?**  
-A: The workflows are standard GitHub Actions. Copilot features require GitHub Copilot subscription.
-
----
-
-## 📊 Example Flow
-
-Real-world example:
-
-```
-10:15 AM - You push code
-10:16 AM - tests.yml starts
-10:18 AM - tests.yml fails (import error)
-10:19 AM - auto-fix-agent.yml triggers
-10:20 AM - Issue #47 created with error logs
-10:20 AM - copilot-fix.yml auto-triggers
-10:22 AM - Analysis complete
-10:22 AM - PR #48 created with fix analysis
-10:23 AM - You get notification
-10:24 AM - You review PR #48
-10:25 AM - Tests pass in PR
-10:26 AM - You merge PR #48
-10:27 AM - main branch fixed ✅
+# Если работает - мержи!
+git checkout main
+git merge auto-fix/run-XXX
+git push
 ```
 
-Total time: ~12 minutes, mostly hands-off.
+---
+
+## 🔧 Конфигурация
+
+### Что установлено
+
+✅ **Ollama** - LLM runtime  
+✅ **Qwen 2.5 Coder 1.5B** - модель для анализа  
+✅ **model_router** - для fallback на Gemini если нужно  
+✅ **gh CLI** - для создания issues и PRs  
+
+### Как это работает
+
+1. Workflow падает
+2. auto-fix-agent.yml срабатывает
+3. Ollama + Qwen запускаются
+4. Qwen анализирует логи
+5. Issue и PR создаются
+6. Ты смотришь и мержишь
 
 ---
 
-## 🚀 Next Steps
+## 🚨 Troubleshooting
 
-1. **Test it** — Make a failing commit to trigger the workflows
-2. **Monitor** — Watch issues and PRs get created
-3. **Review** — Check quality of generated analysis
-4. **Iterate** — Adjust workflow triggers or labels if needed
+### Issue не создалась
+
+```bash
+# Смотри логи
+gh run list --workflow auto-fix-agent.yml --limit 3
+gh run view <RUN_ID> --log | tail -50
+```
+
+**Возможные причины:**
+- Ollama не запустилась (проверь логи)
+- Qwen модель не скачалась
+- GH_TOKEN проблема
+- Тест не упал (workflow успешен)
+
+### PR не создалась
+
+```bash
+# Смотри часть "Create PR with Auto-Fix" в логах
+gh run view <RUN_ID> --log | grep -A 20 "Create PR"
+```
+
+**Возможные причины:**
+- `auto_fix_possible` был false (Qwen не смог сгенерировать фикс)
+- Файл не существует или не найден
+- Code fix был пустой
+- Ветка уже существует
+
+### Фикс не работает
+
+1. Смотри Issue - там полный анализ от Qwen
+2. Смотри PR - там diff что именно изменилось
+3. Муси тесты, может Qwen ошибся
+4. Закрой PR, создай новый issue с деталями
 
 ---
 
-*Last updated: 2025-12-13*
-*Maintained by: Copilot Auto-Fix Agent*
+## 📊 Статус
+
+Проверь статус любого времени:
+
+```bash
+# Последние запуски
+gh run list --workflow auto-fix-agent.yml
+
+# Последние issues с анализом
+gh issue list --label ai-analyzed
+
+# Последние PRs с фиксом
+gh pr list --label auto-fix
+```
+
+---
+
+## 🎯 Что Qwen понимает
+
+✅ **Типы ошибок:**
+- Import errors (ModuleNotFoundError)
+- Test failures (assertion errors)
+- Docker issues (build/run failures)
+- Syntax errors
+- Configuration errors
+- Runtime exceptions
+
+✅ **Что может фиксить:**
+- Добавление недостающих зависимостей
+- Исправление import statements
+- Обновление конфиг файлов
+- Патчи для кода
+- Dockerfile fixes
+
+✅ **Когда создает PR:**
+- Когда `auto_fix_possible: true`
+- Когда есть конкретный `file_to_modify`
+- Когда есть `code_fix` код
+- Когда может быть confident в решении
+
+---
+
+## 📝 Пример Flow
+
+Реальный сценарий:
+
+```
+10:15 AM - Ты пушишь код
+10:16 AM - tests.yml запускается
+10:18 AM - Тесты падают (import error)
+10:19 AM - auto-fix-agent.yml срабатывает
+10:20 AM - Ollama + Qwen запускаются
+10:22 AM - Qwen анализирует логи
+10:23 AM - Issue #47 создается с анализом
+10:24 AM - Qwen генерирует код фиксинга
+10:25 AM - PR #48 создается с фиксом
+10:26 AM - Ты получаешь уведомление
+10:27 AM - Ты смотришь Issue #47
+10:28 AM - Ты смотришь PR #48
+10:30 AM - Ты запускаешь тесты локально
+10:32 AM - Тесты проходят ✅
+10:33 AM - Ты мержишь PR #48
+10:34 AM - main ветка исправлена ✅
+```
+
+**Итого:** ~19 минут, большую часть автоматически!
+
+---
+
+## 🚀 Следующие шаги
+
+1. **Проверь** - создай падающий тест
+2. **Следи** - смотри как создается Issue
+3. **Анализируй** - проверь что Qwen написал
+4. **Тестируй** - запусти тесты с фиксом
+5. **Мержи** - если всё работает
+
+---
+
+*Последнее обновление: 2025-12-13*  
+*Qwen 2.5 Coder на Ollama - автоматический отладчик 🤖*
