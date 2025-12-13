@@ -1,0 +1,256 @@
+name: AI Code Review with Gemini 2.5
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+      - develop
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  gemini-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -q google-generativeai requests
+
+      - name: Fetch PR diff and context
+        id: pr-context
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Получить список изменённых файлов
+          git fetch origin ${{ github.base_ref }}
+          DIFF=$(git diff origin/${{ github.base_ref }}...HEAD --no-color)
+          
+          # Сохранить diff в файл
+          echo "$DIFF" > /tmp/pr_diff.txt
+          
+          # Получить описание PR
+          PR_BODY=$(gh pr view ${{ github.event.number }} --json body -q .body)
+          echo "PR_TITLE=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+          echo "PR_BODY<<EOF" >> $GITHUB_OUTPUT
+          echo "$PR_BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Run Gemini AI Code Review
+        id: review
+        env:
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+        run: |
+          python3 << 'EOF'
+          import os
+          import json
+          import google.generativeai as genai
+          from pathlib import Path
+          
+          # Инициализация
+          api_key = os.getenv("GOOGLE_AI_API_KEY")
+          if not api_key:
+              print("❌ GOOGLE_AI_API_KEY не установлен!")
+              exit(1)
+          
+          genai.configure(api_key=api_key)
+          # Используем актуальную модель Gemini 2.5 Flash
+          model = genai.GenerativeModel("gemini-2.5-flash")
+          
+          # Читаем diff
+          with open("/tmp/pr_diff.txt", "r") as f:
+              pr_diff = f.read()
+          
+          if not pr_diff.strip():
+              print("⚠️  Нет изменений для проверки")
+              exit(0)
+          
+          # Prompt для анализа
+          review_prompt = f"""
+          Ты - опытный код-ревьюер для проекта Content Factory (Python, AI, video generation).
+          
+          Проанализируй следующие изменения в PR и проверь на соответствие:
+          
+          **ОСНОВНЫЕ КРИТЕРИИ ПРОВЕРКИ:**
+          1. **Соответствие архитектуре** - код следует паттернам из ARCHITECTURE.md?
+          2. **Использование Gemini API** - правильно ли используется ModelRouter и google-generativeai?
+             - Поддерживаемые модели ТОЛЬКО: gemini-2.5-flash, gemini-2.5-flash-lite, gemini-1.5-flash
+             - gemini-2.0-flash DEPRECATED!
+          3. **Обработка ошибок** - есть ли proper exception handling и retry logic?
+          4. **Конфигурация** - используется ли config_loader для доступа к параметрам?
+          5. **TTS интеграция** - соответствует ли работе с Edge-TTS?
+          6. **Асинхронность** - async/await используется правильно?
+          7. **Логирование** - достаточное логирование ошибок и прогресса?
+          8. **Тесты** - добавлены ли unit tests для нового функционала?
+          
+          **ЧАСТЫЕ ОШИБКИ В ПРОЕКТЕ:**
+          - ❌ Использование deprecated моделей (gemini-2.0-flash - БОЛЬШЕ НЕ ПОДДЕРЖИВАЕТСЯ!)
+          - ❌ Импорт из moviepy.video вместо moviepy.editor
+          - ❌ Hardcoded API keys (использовать os.getenv())
+          - ❌ Прямой try/except без типа exception
+          - ❌ Мутирование входных параметров
+          - ❌ Использование localStorage (работает локально, не работает в GitHub Actions)
+          - ❌ Пустые или невалидные YAML конфиги
+          - ❌ Забытые await для async функций
+          
+          **АКТУАЛЬНЫЕ МОДЕЛИ GEMINI (на декабрь 2025):**
+          ✅ gemini-2.5-flash - новейшая, быстрая, дешёвая (РЕКОМЕНДУЕТСЯ)
+          ✅ gemini-2.5-flash-lite - ещё быстрее и дешевле для простых задач
+          ✅ gemini-1.5-flash - старая но всё ещё поддерживается
+          ❌ gemini-2.0-flash - DEPRECATED, не использовать!
+          ❌ gemini-2.0-flash-exp - DEPRECATED, не использовать!
+          
+          **PR DIFF ДЛЯ АНАЛИЗА:**
+          ```diff
+          {pr_diff[:8000]}  # Лимит для токенов
+          ```
+          
+          **ТРЕБУЕМЫЙ ФОРМАТ ОТВЕТА (JSON):**
+          {{
+            "overall_rating": "✅ APPROVE | ⚠️  REVIEW | ❌ REQUEST_CHANGES",
+            "summary": "Краткое описание",
+            "issues": [
+              {{
+                "severity": "critical | warning | info",
+                "file": "путь/к/файлу.py",
+                "line": 42,
+                "message": "Описание проблемы",
+                "suggestion": "Как исправить"
+              }}
+            ],
+            "improvements": [
+              "Рекомендация 1",
+              "Рекомендация 2"
+            ],
+            "checklist": {{
+              "architecture_compliant": true/false,
+              "error_handling_ok": true/false,
+              "tests_added": true/false,
+              "no_security_issues": true/false,
+              "correct_gemini_models": true/false
+            }}
+          }}
+          
+          Будь конструктивен и честен. Отметь как положительные, так и отрицательные моменты.
+          """
+          
+          try:
+              print("🤖 Запрашиваю анализ у Gemini 2.5 Flash...")
+              response = model.generate_content(review_prompt)
+              
+              # Парсим JSON из ответа
+              text = response.text
+              
+              # Пытаемся извлечь JSON
+              import re
+              json_match = re.search(r'\{.*\}', text, re.DOTALL)
+              
+              if json_match:
+                  review_data = json.loads(json_match.group())
+              else:
+                  # Fallback если JSON не найден
+                  review_data = {
+                      "overall_rating": "⚠️  REVIEW",
+                      "summary": text[:500],
+                      "issues": [],
+                      "improvements": [],
+                      "checklist": {}
+                  }
+              
+              # Сохраняем результат
+              with open("/tmp/review_result.json", "w") as f:
+                  json.dump(review_data, f, ensure_ascii=False, indent=2)
+              
+              print("✅ Анализ завершён!")
+              print(f"📊 Рейтинг: {review_data.get('overall_rating', 'N/A')}")
+              
+          except Exception as e:
+              print(f"❌ Ошибка при запросе к Gemini: {str(e)}")
+              exit(1)
+          
+          EOF
+
+      - name: Post review as PR comment
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = '/tmp/review_result.json';
+            
+            if (!fs.existsSync(path)) {
+              console.log("❌ Review result not found");
+              return;
+            }
+            
+            const review = JSON.parse(fs.readFileSync(path, 'utf8'));
+            
+            let comment = `## 🤖 AI Code Review by Gemini 2.5 Flash\n\n`;
+            comment += `**Overall Rating:** ${review.overall_rating || '⚠️  REVIEW'}\n\n`;
+            comment += `**Summary:** ${review.summary}\n\n`;
+            
+            if (review.issues && review.issues.length > 0) {
+              comment += `### 🚨 Issues Found\n`;
+              review.issues.forEach(issue => {
+                const severity = issue.severity === 'critical' ? '🔴' : 
+                                issue.severity === 'warning' ? '🟡' : '🔵';
+                comment += `\n${severity} **${issue.severity.toUpperCase()}** in \`${issue.file}:${issue.line}\`\n`;
+                comment += `> ${issue.message}\n`;
+                comment += `💡 ${issue.suggestion}\n`;
+              });
+            }
+            
+            if (review.improvements && review.improvements.length > 0) {
+              comment += `\n### 💡 Improvements Suggested\n`;
+              review.improvements.forEach(imp => {
+                comment += `- ${imp}\n`;
+              });
+            }
+            
+            if (review.checklist) {
+              comment += `\n### ✅ Checklist\n`;
+              Object.entries(review.checklist).forEach(([key, value]) => {
+                const icon = value ? '✅' : '❌';
+                comment += `${icon} ${key.replace(/_/g, ' ')}\n`;
+              });
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Determine PR status
+        if: always()
+        run: |
+          if [ -f "/tmp/review_result.json" ]; then
+            RATING=$(grep -o '"overall_rating": "[^"]*' /tmp/review_result.json | cut -d'"' -f4)
+            if [[ "$RATING" == *"REQUEST_CHANGES"* ]]; then
+              echo "❌ Critical issues found"
+              exit 1
+            elif [[ "$RATING" == *"REVIEW"* ]]; then
+              echo "⚠️  Review needed"
+              exit 0
+            else
+              echo "✅ Changes approved"
+              exit 0
+            fi
+          fi
