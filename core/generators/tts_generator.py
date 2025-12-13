@@ -105,8 +105,10 @@ async def _synthesize_edge_tts_async(
     Returns duration in seconds.
     """
     try:
-        # Edge-TTS communication object
-        communicate = edge_tts.Communicate(text, voice, rate=f"{int(speed * 100)}%")
+        # Edge-TTS requires relative rate (e.g. +0%, +10%, -10%)
+        # Use round() to handle floating point precision (e.g. 1.2 -> +20% not +19%)
+        rate_change = int(round((speed - 1.0) * 100))
+        communicate = edge_tts.Communicate(text, voice, rate=f"{rate_change:+d}%")
         
         # Create output directory
         output_path.parent.mkdir(parents=True, exist_ok=True)

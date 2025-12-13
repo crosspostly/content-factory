@@ -69,6 +69,15 @@ jobs:
           fi
         continue-on-error: false
       
+      - name: Run TTS Generator Tests
+        env:
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || 'test-key-for-ci' }}
+        run: |
+          echo "🎙️ Running TTS Generator Tests..."
+          pytest tests/test_tts_generator.py -v --tb=short
+          echo "✅ TTS Tests passed!"
+        continue-on-error: false
+      
       - name: Run Unit Tests
         env:
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || 'test-key-for-ci' }}
