@@ -64,12 +64,17 @@ jobs:
           api_key = os.getenv('GEMINI_API_KEY')
           genai.configure(api_key=api_key)
           
+          # GEMINI MODELS WHITELIST
+          ALLOWED_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']
+          CURRENT_MODEL = 'gemini-2.5-flash'
+          
           MAX_ATTEMPTS = 10
           SUCCESS = False
           
           for attempt in range(1, MAX_ATTEMPTS + 1):
               print(f"\n{'='*60}")
               print(f"🔧 ATTEMPT {attempt}/{MAX_ATTEMPTS}")
+              print(f"Model: {CURRENT_MODEL} (only 2.5 flash/lite allowed)")
               print(f"{'='*60}\n")
               
               # Шаг 1: Извлечение ошибок
@@ -109,7 +114,7 @@ jobs:
               print(f"❌ Found {len(set(failed_tests))} failed tests")
               print(f"❌ Found {len(set(error_messages))} error messages")
               
-              # Шаг 2: Собираем контекст кода
+              # Шаг 2: сборка контекст кода
               code_files = []
               for py_file in Path('core').rglob('*.py'):
                   if '__pycache__' not in str(py_file):
@@ -123,7 +128,7 @@ jobs:
                           pass
               
               # Шаг 3: Запрос к Gemini
-              print("🤖 Calling Gemini 2.5 Flash for analysis...")
+              print(f"🤖 Calling Gemini 2.5 Flash for analysis...")
               
               prompt = f"""
 You are debugging Python test failures. Attempt {attempt}/{MAX_ATTEMPTS}.
@@ -160,7 +165,8 @@ Be aggressive. Fix everything you can identify.
 """
               
               try:
-                  model = genai.GenerativeModel('gemini-2.5-flash')
+                  # ONLY gemini-2.5-flash - no other models
+                  model = genai.GenerativeModel(CURRENT_MODEL)
                   response = model.generate_content(prompt)
                   
                   with open(f'gemini_analysis_attempt_{attempt}.md', 'w') as f:
@@ -290,7 +296,7 @@ Be aggressive. Fix everything you can identify.
                 head: branchName,
                 base: '${{ github.event.workflow_run.head_branch }}',
                 body: `## 🎉 Automated Fix Success\n\n**Gemini 2.5 Flash** successfully analyzed and fixed the failing tests through iterative debugging.\n\n### Analysis History\n${allAnalysis.slice(0, 5000)}\n\n---\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Fixed by:** Gemini Auto-Fix Workflow`,
-                labels: ['✅ auto-fix', '🤖 ai-generated']
+                labels: ['✅ auto-fix', '🤖 ai-generated', '🤖-auto-fix-only']
               });
               
               console.log(`✅ PR Created: #${pr.data.number}`);
@@ -305,7 +311,7 @@ Be aggressive. Fix everything you can identify.
               console.log(`❌ Error: ${error.message}`);
             }
 
-      - name: Create Frozen Issue
+      - name: Create Frozen Issue (Auto-Fix Only)
         if: steps.fix-status.outputs.success == 'false'
         uses: actions/github-script@v7
         with:
@@ -324,9 +330,9 @@ Be aggressive. Fix everything you can identify.
             const issue = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `🧊 [FROZEN] Auto-fix failed after 10 attempts - Manual intervention required`,
-              body: `## 🔴 Gemini Auto-Fix Failed\n\nAfter 10 iterative attempts, Gemini 2.5 Flash could not automatically resolve the test failures.\n\n### All Attempts\n${allAnalysis.slice(0, 10000)}\n\n---\n\n### Manual Action Required\n👀 Review the analysis above and apply fixes manually.\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Workflow:** ${{ github.event.workflow_run.name }}\n**Branch:** ${{ github.event.workflow_run.head_branch }}`,
-              labels: ['🧊 frozen', '🔴 manual-fix', 'bug', 'help wanted'],
+              title: `🧊 [AUTO-FIX FAILED] Test failures - Manual intervention required`,
+              body: `## 🔴 Gemini 2.5 Flash Auto-Fix Failed\n\n🔉 **THIS ISSUE WAS CREATED BY AUTO-FIX WORKFLOW**\n**DO NOT EDIT THIS ISSUE UNLESS YOU'RE FIXING THE TESTS**\n\nAfter 10 iterative attempts, Gemini 2.5 Flash could not automatically resolve the test failures.\n\n### All Attempts\n${allAnalysis.slice(0, 10000)}\n\n---\n\n### Manual Action Required\n👀 Review the analysis above and fix the tests manually.\n🔐 This issue is managed by auto-fix workflow - don't modify unless necessary.\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Workflow:** ${{ github.event.workflow_run.name }}\n**Branch:** ${{ github.event.workflow_run.head_branch }}`,
+              labels: ['🧊 frozen', '🔴 manual-fix', 'bug', '🤖-auto-fix-only'],
               assignees: ['${{ github.event.workflow_run.actor }}']
             });
             
