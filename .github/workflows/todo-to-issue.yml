@@ -19,13 +19,15 @@ jobs:
           fetch-depth: 0
 
       - name: TODO to Issue
-        uses: alstr/todo-to-issue-action@v5
+        uses: alstr/todo-to-issue-action@v6
         with:
           REPO: ${{ github.repository }}
           BEFORE: ${{ github.event.before }}
           SHA: ${{ github.sha }}
-          INSERT_ISSUE_URLS: 'true'
-          CLOSE_ISSUES: 'true'
-          LABEL: 'todo'
+          INSERT_ISSUE_URLS: true
+          CLOSE_ISSUES: true
+          LABEL: todo
+          AUTO_ASSIGN: true
+          AUTO_P: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
