@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 import tempfile
+import pytest
 
 # Mock google.genai BEFORE any imports to prevent import errors
 mock_google = MagicMock()
