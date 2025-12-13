@@ -1,0 +1,60 @@
+name-template: 'v$RESOLVED_VERSION 🚀'
+tag-template: 'v$RESOLVED_VERSION'
+categories:
+  - title: '🚀 Features'
+    labels:
+      - 'feature'
+      - 'enhancement'
+      - 'type:feature'
+  - title: '🐛 Bug Fixes'
+    labels:
+      - 'bug'
+      - 'bugfix'
+      - 'type:bug'
+  - title: '🔧 Improvements & Maintenance'
+    labels:
+      - 'improvement'
+      - 'refactor'
+      - 'chore'
+      - 'type:chore'
+  - title: '📚 Documentation'
+    labels:
+      - 'documentation'
+      - 'docs'
+  - title: '🔒 Security'
+    labels:
+      - 'security'
+      - 'type:security'
+  - title: '⚡ Performance'
+    labels:
+      - 'performance'
+      - 'optimization'
+  - title: '🤖 AI & Automation'
+    labels:
+      - 'ai'
+      - 'gemini'
+      - 'automation'
+
+version-resolver:
+  major:
+    labels:
+      - 'breaking'
+      - 'major'
+  minor:
+    labels:
+      - 'feature'
+      - 'enhancement'
+  patch:
+    labels:
+      - 'bug'
+      - 'bugfix'
+      - 'improvement'
+
+template: |
+  ## What's Changed
+  $CHANGES
+  
+  ## Credits
+  Thanks to all contributors! 🎉
+  
+  **Full Changelog**: https://github.com/${{owner}}/${{repo}}/compare/${{previousTag}}...v${{resolvedVersion}}
