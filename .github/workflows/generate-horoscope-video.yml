@@ -252,13 +252,14 @@ jobs:
           
           try:
               from core.generators import tts_generator
-              
+
               audio_map = tts_generator.synthesize(
+                  config=config,
                   script=script,
                   mode=fmt,
                   api_key=api_key
               )
-              
+
               print(f"✅ Audio synthesized")
               print(f"   Duration: {audio_map.get('total_duration_sec', 0):.1f}s")
               print(f"   Blocks: {len(audio_map.get('blocks', {}))}")
@@ -275,13 +276,14 @@ jobs:
           
           try:
               from core.generators import video_renderer
-              
+
               video_path = video_renderer.render(
+                  config=config,
                   script=script,
                   audio_map=audio_map,
                   mode=fmt
               )
-              
+
               video_file = Path(video_path)
               if video_file.exists():
                   size_mb = video_file.stat().st_size / (1024*1024)
