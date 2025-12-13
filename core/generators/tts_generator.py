@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 import logging
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from pydub import AudioSegment
 from core.utils.config_loader import ProjectConfig
 
@@ -77,36 +78,40 @@ async def _synthesize_gemini_tts_async(
     speed: float = 1.0
 ) -> float:
     """
-    Synthesize text using Gemini 2.5 Text-to-Speech API.
+    Synthesize text using Gemini 2.5 Text-to-Speech API with native TTS.
     Returns duration in seconds.
     """
     try:
-        # Configure Gemini API
-        genai.configure(api_key=api_key)
-        
-        # Use Gemini 2.5's text-to-speech capability
-        # Note: Gemini TTS is not a separate API, but integrated into content generation
-        # For now, we'll use the audio generation from Gemini API
-        client = genai.Client()
+        # Create client with API key
+        client = genai.Client(api_key=api_key)
         
         # Create output directory
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Call Gemini 2.5 Flash with audio output
-        # Gemini can generate audio when configured properly
+        # Use Gemini 2.5 Flash with native TTS capability
+        # TTS is enabled via responseModalities=["AUDIO"] and speechConfig
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=[
-                {
-                    "text": f"Pronounce the following Russian text with natural speech at speed {speed}x: {text}"
-                }
-            ]
+                types.Part.from_text(
+                    f"Read the following text naturally in Russian: {text}"
+                )
+            ],
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(
+                    encoding="LINEAR_16",
+                    speaking_rate=speed,
+                    pitch=0.0,
+                )
+            )
         )
         
-        # Get audio from response
-        if hasattr(response, 'audio') and response.audio:
-            mp3_data = response.audio
-            duration = _convert_mp3_to_wav(mp3_data, output_path)
+        # Extract audio from response
+        if response.audio:
+            audio_data = response.audio
+            # Audio is returned as MP3 bytes
+            duration = _convert_mp3_to_wav(audio_data, output_path)
             logger.info(f"✅ Gemini TTS synthesized: {len(text)} chars -> {output_path}")
             return duration
         else:
