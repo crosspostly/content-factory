@@ -1,9 +1,14 @@
+# PROJECT-SPECIFIC CONFIGURATION: YouTube Horoscope
+# Inherits from config/shared.yaml, can override any setting
+
 project:
   name: youtube_horoscope
+  display_name: "YouTube Horoscope"
   language: Russian
   niche: astrology
   target_audience: Women 18-45
 
+# Project-specific content strategy
 content_strategy:
   shorts:
     frequency: daily
@@ -16,40 +21,24 @@ content_strategy:
     frequency: as_needed
     duration: 30
 
+# Project-specific generation (inherits shared model config)
 generation:
-  primary_model: qwen2.5-coder:1.5b
-  fallback_models:
-    - gemini-2.5-flash
-  temperature: 0.8
-  max_retries: 3
-  retry_delay_sec: 2
+  # Use shared config (qwen for debugging, etc)
+  temperature: 0.8  # Can override shared
   prompt_files:
     shorts_script: prompts/shorts_scenario.txt
     long_form_script: prompts/long_form_scenario.txt
     ad_script: prompts/ad_script.txt
 
+# Project-specific audio
 audio:
-  enabled: true
-  fallback_engine: edge-tts
+  # Inherit from shared, override specific settings
   engines:
     edge-tts:
-      enabled: true
-      voice: ru-RU-DariyaNeural
-      speed: 1.0
-    gemini-tts:
-      enabled: false
-  background_music_enabled: true
-  sound_effects:
-    enabled: true
-    effects:
-      transition: mystical_whoosh
-      success: coin_drop
+      voice: ru-RU-DariyaNeural  # Project-specific voice
 
+# Project-specific video
 video:
-  fps: 30
-  codec: libx264
-  audio_codec: aac
-  quality: high
   shorts:
     width: 1080
     height: 1920
@@ -59,15 +48,9 @@ video:
     height: 1080
     preferred_source: pixabay_video
 
-subtitles:
-  enabled: true
-  font: Arial
-  font_size: 24
-  color: white
-  position: bottom
-
+# Project-specific upload
 upload:
-  enabled: false
+  enabled: false  # Override shared
   platforms:
     - youtube
   tags:
@@ -75,9 +58,13 @@ upload:
     - astrology
     - zodiac
 
-caching:
-  enabled: true
-  ttl_days: 7
-
-monitoring:
-  telegram_notifications: false
+# Project-specific workflows
+workflows:
+  test:
+    - tests.yml
+    - part1-test.yml
+  generate:
+    - generate-shorts.yml
+    - generate-long-form.yml
+  publish:
+    - publish-youtube.yml
