@@ -1,0 +1,90 @@
+name: Code Quality & Linting
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - feature-*
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  megalinter:
+    runs-on: ubuntu-latest
+    name: MegaLinter
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run MegaLinter
+        uses: oxsecurity/megalinter@v7
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DISABLE_LINTERS: |
+            JAVASCRIPT_ES,
+            TYPESCRIPT_ES,
+            RUST_CLIPPY,
+            GOLANG_GOLANGCI_LINT,
+            JAVA_CHECKSTYLE
+
+  typos:
+    runs-on: ubuntu-latest
+    name: Spell Check
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Typos Check
+        uses: crate-ci/typos@master
+        with:
+          write: false
+
+  coverage:
+    runs-on: ubuntu-latest
+    name: Code Coverage
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --prefer-binary -r requirements.txt -q
+          pip install coverage -q
+
+      - name: Run Tests with Coverage
+        env:
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || 'test-key' }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY || 'test-key' }}
+        run: |
+          pytest tests/ --cov=core --cov-report=xml --cov-report=html -m "not slow" -q
+
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report-${{ github.run_number }}
+          path: htmlcov/
+          retention-days: 7
