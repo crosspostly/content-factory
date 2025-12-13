@@ -1,21 +1,24 @@
 """Pytest configuration and fixtures for Content Factory tests."""
 from __future__ import annotations
 
-# Mock google.genai BEFORE any imports to prevent import errors
+import os
 import sys
+from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
+import tempfile
+
+# Mock google.genai BEFORE any imports to prevent import errors
 mock_google = MagicMock()
 mock_google.genai = MagicMock()
 sys.modules['google'] = mock_google
 sys.modules['google.genai'] = mock_google.genai
-import tempfile
+
+# Mock core.utils.model_router
 sys.modules['core.utils.model_router'] = MagicMock()
-# Also mock core.utils as a package with model_router attribute
-cls_utils = MagicMock()
-cls_utils.model_router = sys.modules['core.utils.model_router']
-sys.modules['core.utils'] = cls_utils
-from pathlib import Path
-from typing import Any
+core_utils = MagicMock()
+core_utils.model_router = sys.modules['core.utils.model_router']
+sys.modules['core.utils'] = core_utils
 
 import pytest
 
@@ -184,12 +187,11 @@ def mock_config_with_qwen():
 @pytest.fixture
 def error_log_fixtures() -> dict[str, str]:
     """Load error log fixtures for testing."""
-    from pathlib import Path
-    
     fixtures_dir = Path(__file__).parent / "fixtures" / "error_logs"
     logs = {}
     
-    for log_file in fixtures_dir.glob("*.log"):
-        logs[log_file.stem] = log_file.read_text()
+    if fixtures_dir.exists():
+        for log_file in fixtures_dir.glob("*.log"):
+            logs[log_file.stem] = log_file.read_text()
     
     return logs
