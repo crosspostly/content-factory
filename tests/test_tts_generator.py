@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch, AsyncMock
+import asyncio
 
 import pytest
 
@@ -52,11 +53,11 @@ def sample_script_long_form():
 class TestGeminiTTSSynthesis:
     """Test Gemini TTS synthesis."""
 
+    @patch("core.generators.tts_generator._convert_mp3_to_wav")
     @patch("core.generators.tts_generator.genai.Client")
-    @pytest.mark.asyncio
-    async def test_synthesize_gemini_tts_basic(self, mock_client_class, tmp_path):
+    def test_synthesize_gemini_tts_basic(self, mock_client_class, mock_convert, tmp_path):
         """Test basic Gemini TTS synthesis."""
-        # Setup mock
+        # Setup mocks
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
         
@@ -65,19 +66,18 @@ class TestGeminiTTSSynthesis:
         mock_client.models.generate_content.return_value = mock_response
         
         # Mock audio conversion
-        with patch("core.generators.tts_generator._convert_mp3_to_wav") as mock_convert:
-            mock_convert.return_value = 5.0
-            
-            # Test synthesis
-            duration = await tts_generator._synthesize_gemini_tts_async(
-                api_key="test-key",
-                text="Test text",
-                output_path=tmp_path / "test.wav",
-                speed=1.0
-            )
-            
-            assert duration == 5.0
-            mock_convert.assert_called_once()
+        mock_convert.return_value = 5.0
+        
+        # Test synthesis (run async function)
+        duration = asyncio.run(tts_generator._synthesize_gemini_tts_async(
+            api_key="test-key",
+            text="Test text",
+            output_path=tmp_path / "test.wav",
+            speed=1.0
+        ))
+        
+        assert duration == 5.0
+        mock_convert.assert_called_once()
     
     def test_synthesize_missing_api_key(self, mock_config, sample_script_shorts):
         """Test that synthesis without API key raises error."""
@@ -95,11 +95,11 @@ class TestSynthesizeModes:
     @patch("core.generators.tts_generator._synthesize_gemini_tts_async")
     def test_synthesize_shorts(self, mock_synth, mock_config, sample_script_shorts):
         """Test shorts synthesis uses Gemini TTS."""
-        mock_synth.return_value = 10.0  # duration (as coroutine)
-        # Make it async-compatible
-        async def async_mock(*args, **kwargs):
-            return 10.0
-        mock_synth.side_effect = async_mock
+        # Mock the async function to return coroutine
+        async def async_return(val):
+            return val
+        
+        mock_synth.return_value = async_return(10.0)
         
         result = tts_generator.synthesize(
             mock_config,
@@ -115,9 +115,22 @@ class TestSynthesizeModes:
     @patch("core.generators.tts_generator._synthesize_gemini_tts_async")
     def test_synthesize_long_form(self, mock_synth, mock_config, sample_script_long_form):
         """Test long-form synthesis with Gemini TTS."""
-        async def async_mock(*args, **kwargs):
+        # Mock the async function
+        async def async_return_dict(val):
+            return {
+                "love": f"path_love_{val}",
+                "money": f"path_money_{val}",
+                "health": f"path_health_{val}"
+            }, val * 3
+        
+        # For long_form, we call it 3 times and need to mock differently
+        call_count = [0]
+        
+        async def mock_async_func(*args, **kwargs):
+            call_count[0] += 1
             return 5.0
-        mock_synth.side_effect = async_mock
+        
+        mock_synth.side_effect = mock_async_func
         
         result = tts_generator.synthesize(
             mock_config,
@@ -136,9 +149,11 @@ class TestSynthesizeModes:
     @patch("core.generators.tts_generator._synthesize_gemini_tts_async")
     def test_synthesize_ad(self, mock_synth, mock_config):
         """Test ad synthesis with Gemini TTS."""
-        async def async_mock(*args, **kwargs):
-            return 3.0
-        mock_synth.side_effect = async_mock
+        # Mock the async function
+        async def async_return(val):
+            return val
+        
+        mock_synth.return_value = async_return(3.0)
         
         script = {
             "narration_text": "Ad text here"
