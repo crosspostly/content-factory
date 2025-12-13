@@ -10,16 +10,16 @@ import tempfile
 import pytest
 
 # Mock google.genai BEFORE any imports to prevent import errors
-mock_google = MagicMock()
-mock_google.genai = MagicMock()
-sys.modules['google'] = mock_google
-sys.modules['google.genai'] = mock_google.genai
+# mock_google = MagicMock()
+# mock_google.genai = MagicMock()
+# sys.modules['google'] = mock_google
+# sys.modules['google.genai'] = mock_google.genai
 
-sys.modules['core.utils.model_router'] = MagicMock()
+# sys.modules['core.utils.model_router'] = MagicMock()
 
 # Import real core.utils package and add model_router attribute
 import core.utils
-core.utils.model_router = sys.modules['core.utils.model_router']
+# core.utils.model_router = sys.modules['core.utils.model_router']
 
 @pytest.fixture(scope="session")
 def test_output_dir():

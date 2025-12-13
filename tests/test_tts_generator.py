@@ -101,11 +101,11 @@ class TestSynthesizeModes:
     @patch("core.generators.tts_generator._synthesize_gemini_tts_async")
     def test_synthesize_shorts(self, mock_synth, mock_config, sample_script_shorts):
         """Test shorts synthesis uses Gemini TTS."""
-        # Mock the async function to return coroutine
-        async def async_return(val):
-            return val
+        # Use side_effect with an async function to ensure a fresh coroutine is returned each time
+        async def mock_async_func(*args, **kwargs):
+            return 10.0
         
-        mock_synth.return_value = async_return(10.0)
+        mock_synth.side_effect = mock_async_func
         
         result = tts_generator.synthesize(
             mock_config,
@@ -155,11 +155,11 @@ class TestSynthesizeModes:
     @patch("core.generators.tts_generator._synthesize_gemini_tts_async")
     def test_synthesize_ad(self, mock_synth, mock_config):
         """Test ad synthesis with Gemini TTS."""
-        # Mock the async function
-        async def async_return(val):
-            return val
+        # Use side_effect with an async function
+        async def mock_async_func(*args, **kwargs):
+            return 3.0
         
-        mock_synth.return_value = async_return(3.0)
+        mock_synth.side_effect = mock_async_func
         
         script = {
             "narration_text": "Ad text here"
