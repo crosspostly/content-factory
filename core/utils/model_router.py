@@ -21,16 +21,16 @@ logger = logging.getLogger(__name__)
 # Updated Dec 2025: Using gemini-2.5-flash as primary (latest & most reliable)
 MODELS = {
     "script": {
-        "primary": "gemini-2.5-flash",       # ✅ Latest Gemini model (FIXED)
-        "fallback": "gemini-1.5-pro"         # ✅ Fallback to pro variant
+        "primary": "gemini-2.5-flash",       # ✅ Latest Gemini model
+        "fallback": "gemini-2.5-flash-lite"  # ✅ New low-cost fallback (no more 1.5)
     },
     "tts": {
         "primary": "gemini-2.5-flash",
-        "fallback": "gemini-1.5-pro"
+        "fallback": "gemini-2.5-flash-lite"
     },
     "image_gen": {
         "primary": "gemini-2.5-flash",
-        "fallback": "gemini-1.5-pro"
+        "fallback": "gemini-2.5-flash-lite"
     }
 }
 
