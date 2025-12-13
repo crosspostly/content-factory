@@ -1,6 +1,12 @@
 """Pytest configuration and fixtures for Content Factory tests."""
 from __future__ import annotations
 
+# Mock google.genai BEFORE any imports to prevent import errors
+import sys
+from unittest.mock import MagicMock
+sys.modules['google'] = MagicMock()
+sys.modules['google.genai'] = MagicMock()
+
 import os
 import tempfile
 from pathlib import Path
