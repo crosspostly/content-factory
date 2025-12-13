@@ -15,6 +15,12 @@ from core.utils.model_router import (
     _get_provider_for_model,
 )
 
+# Mock google.genai to prevent import errors
+import sys
+if 'google.genai' not in sys.modules:
+    sys.modules['google'] = MagicMock()
+    sys.modules['google.genai'] = MagicMock()
+
 
 class TestOllamaProvider:
     """Test Ollama provider implementation."""
