@@ -1,344 +1,191 @@
 # 📦 How to Add a New Project
 
-> **TL;DR:** Run the setup script and answer a few questions. That's it!
-
-## 🚀 Quick Start
+## TL;DR
 
 ```bash
-python3 scripts/setup_project.py
-```
+# 1. Copy existing project
+cp -r projects/youtube_horoscope projects/my_new_project
 
-Then answer the interactive questions:
+# 2. Edit config
+vi projects/my_new_project/config.yaml
 
-```
-📝 Project Name (e.g., youtube_podcast): my_project
-📄 Description: AI-powered content generation for my platform
-🎬 Content Type (shorts/long-form/ad): shorts
-🔑 API Keys needed (comma-separated): GOOGLE_AI_API_KEY, MY_CUSTOM_API_KEY
-📊 Enable scheduling? (y/n): y
-🕐 Cron schedule (0 6 * * * = daily at 6:00 UTC): 0 9 * * *
-```
+# 3. Copy workflow
+cp .github/workflows/generate-horoscope-video.yml .github/workflows/generate-my_new_project.yml
 
-**That's it!** Your project is ready! ✅
+# 4. Edit workflow (change project name)
+vi .github/workflows/generate-my_new_project.yml
 
----
-
-## 📁 What Gets Created
-
-```
-projects/my_project/
-├── config.yaml                 # Project configuration
-├── content_plan.json          # Content strategy
-├── prompts/
-│   ├── script.txt             # Script generation prompt
-│   ├── tts.txt                # TTS synthesis prompt
-│   └── video.txt              # Video rendering prompt
-└── README.md                  # Project documentation
-
-.github/workflows/
-└── generate-my_project.yml    # Auto-generated workflow
+# Done! ✅
 ```
 
 ---
 
-## 🎯 What Each File Does
+## Project Structure
 
-### `config.yaml` - Project Settings
+```
+projects/
+├── youtube_horoscope/          ← Example project
+│   ├── config.yaml            ← Settings (models, API keys, schedule)
+│   ├── content_plan.json      ← Topics and strategy
+│   └── prompts/               ← AI instructions
+│       ├── script.txt
+│       ├── tts.txt
+│       └── video.txt
+│
+└── my_new_project/            ← Your project (copy youtube_horoscope)
+    ├── config.yaml
+    ├── content_plan.json
+    └── prompts/
+```
+
+---
+
+## What Goes Where?
+
+### 🌍 Global Settings (used by ALL projects)
+
+**File:** `core/` directory
+- Video rendering engine
+- TTS synthesis
+- Model routing (fallback logic)
+- Cache management
+- Publishing APIs
+
+**Do NOT edit** unless you're changing how the whole system works.
+
+### 🎯 Project-Specific Settings
+
+**File:** `projects/YOUR_PROJECT/config.yaml`
 
 ```yaml
 project:
-  name: my_project
-  description: AI-powered content generation
-  content_type: shorts
-  enabled: true
+  name: my_new_project        # ← Your project name
+  description: My content     # ← What it does
+  content_type: shorts        # ← shorts/long-form/ad
+  platforms: [youtube]        # ← Where to publish
 
 generation:
   primary_model: gemini-2.5-flash
-  fallback_models:
-    - gemini-2.5-pro
-    - openrouter-qwen
   temperature: 0.7
-  max_retries: 2
-
-api_keys:
-  - GOOGLE_AI_API_KEY
-  - MY_CUSTOM_API_KEY
 
 scheduling:
   enabled: true
-  cron: "0 9 * * *"  # Daily at 9:00 UTC
-  timezone: UTC
-
-output:
-  format: video
-  video_quality: 1080p
-  frame_rate: 30
+  cron: "0 9 * * *"           # ← When to run (9:00 UTC daily)
 ```
 
-### `content_plan.json` - Strategy
+**File:** `projects/YOUR_PROJECT/prompts/*.txt`
 
-```json
-{
-  "project": "my_project",
-  "topics": [
-    "topic 1",
-    "topic 2",
-    "topic 3"
-  ],
-  "content_style": "professional",
-  "target_audience": "general",
-  "upload_schedule": {
-    "youtube": "daily",
-    "tiktok": "multiple-per-day",
-    "instagram": "daily"
-  }
-}
 ```
-
-### `prompts/` - AI Instructions
-
-**script.txt** - How to write scripts
-```
-You are a professional scriptwriter for [content_type].
-
-Create engaging scripts about [topics].
-Style: [content_style]
-Audience: [target_audience]
-Length: [duration]
-
-Output format:
-[NARRATOR]
-Scripted text here...
-
-[VISUAL]
-Visual description here...
-```
-
-**tts.txt** - How to synthesize audio
-```
-You are a voice director for [content_type].
-
-Synthesize audio from scripts about [topics].
-Voice: professional, engaging
-Pace: [pace]
-Emotions: [emotions]
-```
-
-**video.txt** - How to render video
-```
-You are a video editor for [content_type].
-
-Create videos for [platform].
-Style: [video_style]
-Quality: [video_quality]
-Format: [format]
+script.txt   ← How to write scripts for THIS project
+tts.txt      ← Voice style for THIS project
+video.txt    ← Visual style for THIS project
 ```
 
 ---
 
-## 🔧 Customization Examples
+## Step-by-Step
 
-### Example 1: Daily Podcast Generation
-
-```bash
-python3 scripts/setup_project.py
-
-# Answers:
-Project Name: daily_podcast
-Description: AI-powered daily podcast for tech news
-Content Type: long-form
-API Keys: GOOGLE_AI_API_KEY, ELEVENLABS_API_KEY
-Scheduling: y
-Cron: 0 8 * * *  # 8:00 UTC daily
-```
-
-### Example 2: Multiple Daily Shorts
+### 1. Copy Existing Project
 
 ```bash
-python3 scripts/setup_project.py
-
-# Answers:
-Project Name: tiktok_shorts
-Description: 3 TikTok shorts per day
-Content Type: shorts
-API Keys: GOOGLE_AI_API_KEY, PIXABAY_API_KEY
-Scheduling: y
-Cron: 0 6,14,22 * * *  # 3x daily (6, 14, 22 UTC)
+cp -r projects/youtube_horoscope projects/my_new_project
 ```
 
-### Example 3: On-Demand Ads
+### 2. Edit config.yaml
 
 ```bash
-python3 scripts/setup_project.py
-
-# Answers:
-Project Name: ad_generator
-Description: AI ad content generator
-Content Type: ad
-API Keys: GOOGLE_AI_API_KEY
-Scheduling: n  # Manual trigger only
+vi projects/my_new_project/config.yaml
 ```
 
----
+Change:
+- `project.name` → your project name
+- `project.description` → what it does
+- `scheduling.cron` → when to run (or disable)
 
-## 🚀 After Setup
-
-### 1. Edit the Configuration
+### 3. Edit Prompts
 
 ```bash
-vi projects/my_project/config.yaml
+vi projects/my_new_project/prompts/script.txt
 ```
 
-Customize:
-- API models and parameters
-- Output formats and quality
-- Scheduling (if enabled)
+Write instructions for AI:
+- How to write scripts
+- What tone to use
+- What topics to cover
 
-### 2. Customize Content Plan
+### 4. Copy & Edit Workflow
 
 ```bash
-vi projects/my_project/content_plan.json
+cp .github/workflows/generate-horoscope-video.yml \
+   .github/workflows/generate-my_new_project.yml
 ```
 
-Set:
-- Your topics and themes
-- Content style and tone
-- Publishing schedule
-
-### 3. Fine-tune Prompts
-
-```bash
-vi projects/my_project/prompts/script.txt
-vi projects/my_project/prompts/tts.txt
-vi projects/my_project/prompts/video.txt
-```
-
-Adjust AI instructions for your brand/style.
-
-### 4. Test Locally
-
-```bash
-cd projects/my_project
-python3 ../../core/orchestrators/pipeline_orchestrator.py \
-  --project my_project \
-  --test
-```
-
-### 5. Manual Trigger (Optional)
-
-```bash
-gh workflow run generate-my_project.yml \
-  -f format=shorts \
-  -f date=2025-12-14
-```
-
----
-
-## 📊 Generated Workflow
-
-Autоматически создается `.github/workflows/generate-my_project.yml`:
-
+Change ONE line:
 ```yaml
-name: Generate my_project
+env:
+  PROJECT: my_new_project  # ← Your project name here
+```
 
-on:
-  schedule:
-    - cron: "0 9 * * *"  # Your schedule
-  workflow_dispatch:     # Manual trigger
+### 5. Push to GitHub
 
-jobs:
-  generate:
-    runs-on: ubuntu-22.04
-    steps:
-      # Uses your config.yaml
-      # Loads your prompts/
-      # Follows your content_plan.json
+```bash
+git add projects/my_new_project
+git add .github/workflows/generate-my_new_project.yml
+git commit -m "add: my_new_project"
+git push
+```
+
+**Done!** ✅
+
+---
+
+## Example: Add Daily Podcast
+
+```bash
+# 1. Copy
+cp -r projects/youtube_horoscope projects/daily_podcast
+
+# 2. Edit config
+vi projects/daily_podcast/config.yaml
+# Change: name → daily_podcast, cron → 0 8 * * *
+
+# 3. Edit prompts
+vi projects/daily_podcast/prompts/script.txt
+# Write: "Create 10-minute podcast about tech news..."
+
+# 4. Copy workflow
+cp .github/workflows/generate-horoscope-video.yml \
+   .github/workflows/generate-daily_podcast.yml
+
+# 5. Edit workflow
+vi .github/workflows/generate-daily_podcast.yml
+# Change: PROJECT: daily_podcast
+
+# 6. Push
+git add .
+git commit -m "add: daily_podcast project"
+git push
 ```
 
 ---
 
-## ✅ Checklist
+## What Happens?
 
-- [ ] Ran `python3 scripts/setup_project.py`
-- [ ] Edited `projects/my_project/config.yaml`
-- [ ] Customized `projects/my_project/content_plan.json`
-- [ ] Updated prompts in `projects/my_project/prompts/`
-- [ ] Tested locally with `--test` flag
-- [ ] Triggered workflow manually: `gh workflow run generate-my_project.yml`
-- [ ] Checked GitHub Actions logs
-- [ ] Project is live! 🎉
+1. **Core tools** (video, TTS, models) work for ALL projects
+2. **Your config** controls:
+   - Which models to use
+   - When to run
+   - What prompts to load
+3. **Your prompts** tell AI what to create
 
 ---
 
-## 🆘 Troubleshooting
+## That's It!
 
-**Q: Script doesn't find my project config**
-- A: Make sure `projects/my_project/config.yaml` exists
+- ✅ Copy folder
+- ✅ Edit config.yaml
+- ✅ Edit prompts/
+- ✅ Copy workflow
+- ✅ Push
 
-**Q: API keys not found**
-- A: Add secrets to GitHub: Settings → Secrets → New repository secret
-
-**Q: Workflow doesn't show up**
-- A: Wait 1-2 minutes for GitHub to sync, or manually trigger
-
-**Q: Want to disable a project?**
-- A: Set `enabled: false` in `config.yaml`, or delete the directory
-
----
-
-## 📚 Full Project Structure
-
-```
-content-factory/
-├── core/
-│   ├── generators/
-│   │   ├── script_generator.py
-│   │   ├── tts_generator.py
-│   │   └── video_renderer.py
-│   ├── orchestrators/
-│   │   └── pipeline_orchestrator.py
-│   └── utils/
-│       └── config_loader.py
-│
-├── projects/
-│   ├── youtube_horoscope/
-│   │   ├── config.yaml
-│   │   ├── content_plan.json
-│   │   └── prompts/
-│   │
-│   └── my_project/          ← YOUR NEW PROJECT
-│       ├── config.yaml
-│       ├── content_plan.json
-│       └── prompts/
-│
-├── .github/workflows/
-│   ├── generate-youtube_horoscope.yml
-│   └── generate-my_project.yml  ← AUTO-GENERATED
-│
-└── scripts/
-    └── setup_project.py     ← YOU ARE HERE
-```
-
----
-
-## 🎓 Next Steps
-
-1. **Learn the Config Format**: Read `projects/youtube_horoscope/config.yaml`
-2. **Check Prompts**: Look at `projects/youtube_horoscope/prompts/` for examples
-3. **Customize**: Copy structure to your new project
-4. **Test**: Run locally first
-5. **Deploy**: Push to GitHub and watch it go! 🚀
-
----
-
-## 💡 Pro Tips
-
-✨ **Reuse configs**: Copy a working project's config and customize it
-✨ **Test prompts locally**: Edit and test before committing
-✨ **Use cron generator**: [crontab.guru](https://crontab.guru) for schedule syntax
-✨ **Monitor runs**: Check GitHub Actions for logs
-✨ **Add to README.md**: Document your project's specifics
-
----
-
-**Questions?** Check the example projects in `projects/` directory!
+No scripts. No wizards. Just files.
