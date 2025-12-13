@@ -10,6 +10,12 @@ from pathlib import Path
 from core.generators import script_generator
 from core.utils.config_loader import ProjectConfig
 
+# Mock google.genai to prevent import errors
+import sys
+if 'google.genai' not in sys.modules:
+    sys.modules['google'] = MagicMock()
+    sys.modules['google.genai'] = MagicMock()
+
 
 @pytest.fixture
 def mock_config():
