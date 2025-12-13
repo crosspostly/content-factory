@@ -1,11 +1,11 @@
 name: Auto-Fix Agent
 
-# ТОЛЬКО на feature branches - НЕ на main!
+# Срабатывает ТОЛЬКО когда основные тесты падают на feature branch
 on:
   workflow_run:
     workflows: ["Run Tests", "Run Tests in Docker"]
     types: [completed]
-  
+
 permissions:
   contents: write
   issues: write
@@ -16,12 +16,11 @@ jobs:
   auto-fix-analysis:
     name: Auto-Fix Analysis
     runs-on: ubuntu-latest
-    # ВАЖНО: срабатывает только если основной workflow упал И это не main branch
+    # ТОЛЬКО если: 1) workflow упал, 2) это НЕ main, 3) это реальный run (не workflow_dispatch)
     if: |
       github.event.workflow_run.conclusion == 'failure' &&
       github.event.workflow_run.head_branch != 'main' &&
-      github.event.workflow_run.head_branch != null &&
-      github.event.workflow_run.event != 'workflow_dispatch'
+      github.event.workflow_run.head_branch != null
     
     steps:
       - name: Checkout code
@@ -30,24 +29,13 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_branch }}
       
-      - name: Get workflow failure info
-        id: failure-info
-        run: |
-          echo "workflow_run_id=${{ github.event.workflow_run.id }}" >> $GITHUB_OUTPUT
-          echo "workflow_name=${{ github.event.workflow_run.name }}" >> $GITHUB_OUTPUT
-          echo "run_number=${{ github.event.workflow_run.run_number }}" >> $GITHUB_OUTPUT
-          echo "branch_name=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ github.token }}
-      
-      - name: Check for duplicate issue
+      - name: Check for duplicate auto-fix
         id: check-duplicate
         run: |
-          # Проверяем есть ли уже issue для этого workflow run
-          ISSUES=$(gh issue list --state open --label auto-generated --json title,body -q '.[] | select(.body | contains("${{ github.event.workflow_run.id }}")) | .title')
-          if [ -n "$ISSUES" ]; then
+          EXISTING=$(gh issue list --state open --label "auto-fix-pending" --search "workflow_run:${{ github.event.workflow_run.id }}" --json number | jq length)
+          if [ "$EXISTING" -gt 0 ]; then
             echo "skip=true" >> $GITHUB_OUTPUT
-            echo "✅ Issue уже существует для этого run"
+            echo "✅ Auto-fix уже создана для этого run"
           else
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
@@ -55,190 +43,42 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         continue-on-error: true
       
-      - name: Set up Python
-        if: steps.check-duplicate.outputs.skip != 'true'
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      
-      - name: Install dependencies
+      - name: Create auto-fix issue
         if: steps.check-duplicate.outputs.skip != 'true'
         run: |
-          python -m pip install --upgrade pip
-          pip install google-generativeai pyyaml requests
-      
-      - name: Download test logs
-        if: steps.check-duplicate.outputs.skip != 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: test-outputs-${{ github.event.workflow_run.run_number }}
-          path: ./logs
-        continue-on-error: true
-      
-      - name: Run Auto-Fix Agent
-        if: steps.check-duplicate.outputs.skip != 'true'
-        id: auto-fix
-        env:
-          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 << 'PYTHON_SCRIPT'
-          import sys
-          import os
-          sys.path.insert(0, '.')
+          BODY="## Auto-Fix: Workflow Failure\n\n"
+          BODY="${BODY}**Workflow**: ${{ github.event.workflow_run.name }}\n"
+          BODY="${BODY}**Branch**: ${{ github.event.workflow_run.head_branch }}\n"
+          BODY="${BODY}**Run ID**: ${{ github.event.workflow_run.id }}\n"
+          BODY="${BODY}**Status**: Failed\n\n"
+          BODY="${BODY}[View workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }})\n"
+          BODY="${BODY}\n**Agent Status**: Analyzing error...\n\n"
+          BODY="${BODY}workflow_run:${{ github.event.workflow_run.id }}"
           
-          try:
-              from core.auto_fix_agent import analyze_workflow_error, create_github_issue, classify_error_complexity
-              from core.utils.config_loader import ProjectConfig
-          except ImportError as e:
-              print(f"⚠️  Could not import auto_fix_agent: {e}")
-              sys.exit(0)
-          
-          project_name = "content-factory"
-          workflow_name = "${{ steps.failure-info.outputs.workflow_name }}"
-          workflow_id = "${{ steps.failure-info.outputs.workflow_run_id }}"
-          run_number = "${{ steps.failure-info.outputs.run_number }}"
-          branch_name = "${{ steps.failure-info.outputs.branch_name }}"
-          
-          # Try to load error logs from artifact
-          error_logs = ""
-          try:
-              with open('logs/pytest.log', 'r') as f:
-                  error_logs = f.read()
-              print(f"📄 Loaded pytest logs ({len(error_logs)} chars)")
-          except Exception as e:
-              print(f"⚠️  Could not load pytest.log: {e}")
-              error_logs = f"""
-              Workflow: {workflow_name}
-              Run ID: {workflow_id}
-              Branch: {branch_name}
-              Status: Failed
-              
-              Check GitHub Actions logs for details:
-              https://github.com/${{ github.repository }}/actions/runs/{workflow_id}
-              """
-          
-          print(f"🔍 Analyzing workflow failure on branch: {branch_name}")
-          print(f"🌖 Sending to Qwen/Gemini for analysis...")
-          
-          try:
-              # Load config for model routing
-              try:
-                  config = ProjectConfig.load('projects/youtube_horoscope/config.yaml')
-              except:
-                  # Use default config
-                  config = ProjectConfig({
-                      'generation': {
-                          'primary_model': 'gemini-2.5-flash',
-                          'fallback_models': ['gemini-2.5-pro'],
-                          'temperature': 0.7,
-                          'max_retries': 2
-                      }
-                  })
-              
-              # Analyze the error
-              analysis = analyze_workflow_error(
-                  project_name,
-                  workflow_name,
-                  error_logs,
-                  config=config
-              )
-              
-              print(f"✅ Analysis complete")
-              print(f"   Problem: {analysis.get('problem', 'Unknown')}")
-              print(f"   Severity: {analysis.get('severity', 'unknown')}")
-              print(f"   Auto-fix possible: {analysis.get('auto_fix_possible', False)}")
-              
-              # Classify complexity
-              complexity = classify_error_complexity(analysis)
-              print(f"   Complexity: {complexity}")
-              
-              # Save complexity for next steps
-              with open('/tmp/complexity.txt', 'w') as f:
-                  f.write(complexity)
-              
-              # Save analysis JSON
-              import json
-              with open('/tmp/analysis.json', 'w') as f:
-                  json.dump(analysis, f, indent=2)
-              
-              # Create GitHub Issue with analysis
-              issue_url = create_github_issue(
-                  project_name,
-                  workflow_id,
-                  run_number,
-                  analysis
-              )
-              
-              if issue_url:
-                  print(f"📋 Issue created: {issue_url}")
-                  with open('/tmp/issue_url.txt', 'w') as f:
-                      f.write(issue_url)
-                  
-                  # Extract issue number from URL
-                  issue_number = issue_url.split('/')[-1]
-                  with open('/tmp/issue_number.txt', 'w') as f:
-                      f.write(issue_number)
-              else:
-                  print(f"⚠️  Could not create issue")
-                  
-          except Exception as e:
-              print(f"❌ Auto-Fix Agent failed: {str(e)}")
-              import traceback
-              traceback.print_exc()
-          
-          PYTHON_SCRIPT
-        continue-on-error: true
-      
-      - name: Add labels to issue based on complexity
-        if: always() && steps.check-duplicate.outputs.skip != 'true'
-        run: |
-          if [ -f /tmp/issue_number.txt ] && [ -f /tmp/complexity.txt ]; then
-            ISSUE_NUM=$(cat /tmp/issue_number.txt)
-            COMPLEXITY=$(cat /tmp/complexity.txt)
-            
-            if [ "$COMPLEXITY" = "SIMPLE" ]; then
-              echo "🤖 Marking issue as auto-fix-ready"
-              gh issue edit $ISSUE_NUM --add-label "auto-fix-ready"
-            else
-              echo "👤 Marking issue as needs-dev-task"
-              gh issue edit $ISSUE_NUM --add-label "needs-dev-task"
-            fi
-          fi
+          gh issue create \
+            --title "🤖 Auto-Fix: ${{ github.event.workflow_run.name }} failed" \
+            --body "$BODY" \
+            --label "auto-fix-pending,auto-generated" \
+            --assignee "@me" || true
         env:
           GH_TOKEN: ${{ github.token }}
-        continue-on-error: true
-      
-      - name: Comment on PR
-        if: always() && steps.check-duplicate.outputs.skip != 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            let comment = "🔍 **Auto-Fix Agent** analyzed the failure:\n\n";
-            
-            if (fs.existsSync('/tmp/issue_url.txt')) {
-              const issueUrl = fs.readFileSync('/tmp/issue_url.txt', 'utf8').trim();
-              comment += `📋 [View detailed analysis](${issueUrl})`;
-            } else {
-              comment += "⚠️ Analysis did not produce an issue";
-            }
-            
-            // Find and comment on PR
-            const { data: pullRequests } = await github.rest.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              head: `${context.repo.owner}:${{ github.event.workflow_run.head_branch }}`
-            });
-            
-            if (pullRequests.length > 0) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pullRequests[0].number,
-                body: comment
-              });
-            }
+
+  notify-failure:
+    name: Notify Failure
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'failure'
+    steps:
+      - name: Send Telegram notification
+        if: secrets.TELEGRAM_BOT_TOKEN
+        run: |
+          MESSAGE="🔴 Workflow Failed\n"
+          MESSAGE="${MESSAGE}Workflow: ${{ github.event.workflow_run.name }}\n"
+          MESSAGE="${MESSAGE}Branch: ${{ github.event.workflow_run.head_branch }}\n"
+          MESSAGE="${MESSAGE}Run: ${{ github.event.workflow_run.id }}\n\n"
+          MESSAGE="${MESSAGE}[View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }})"
+          
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "text=$MESSAGE" \
+            -d "parse_mode=Markdown" > /dev/null || true
         continue-on-error: true

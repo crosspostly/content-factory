@@ -1,6 +1,5 @@
 name: Generate Horoscope Video
 
-# Запуск: вручную через Actions или по расписанию
 on:
   workflow_dispatch:
     inputs:
@@ -23,9 +22,8 @@ on:
         default: 'youtube_horoscope'
         type: string
   
-  # По расписанию: каждый день в 06:00 UTC (09:00 MSK) для shorts
   schedule:
-    - cron: '0 6 * * *'
+    - cron: '0 6 * * *'  # Daily 06:00 UTC = 09:00 MSK
 
 jobs:
   generate-video:
@@ -44,52 +42,38 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
       
-      - name: Cache system dependencies
-        uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: ffmpeg imagemagick ghostscript fonts-dejavu-core libsm6 libxext6
-          version: 1.0
-      
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg imagemagick ghostscript fonts-dejavu-core libsm6 libxext6
-          echo "✅ FFmpeg: $(ffmpeg -version | head -1)"
-          echo "✅ Python: $(python --version)"
+          echo "✅ System dependencies installed"
       
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -q
+          echo "✅ Python dependencies installed"
       
       - name: Determine format and date
         id: params
-        env:
-          INPUT_FORMAT: ${{ github.event.inputs.format }}
-          INPUT_DATE: ${{ github.event.inputs.date }}
-          INPUT_PROJECT: ${{ github.event.inputs.project }}
         run: |
-          python3 << 'EOF'
-          import os
-          from datetime import date
+          FORMAT="${{ github.event.inputs.format || 'shorts' }}"
+          DATE="${{ github.event.inputs.date }}"
+          PROJECT="${{ github.event.inputs.project || 'youtube_horoscope' }}"
           
-          # Параметры
-          fmt = os.getenv('INPUT_FORMAT') or 'shorts'
-          dt = os.getenv('INPUT_DATE') or date.today().isoformat()
-          proj = os.getenv('INPUT_PROJECT') or 'youtube_horoscope'
+          if [ -z "$DATE" ]; then
+            DATE=$(date +%Y-%m-%d)
+          fi
           
-          print(f"Format: {fmt}")
-          print(f"Date: {dt}")
-          print(f"Project: {proj}")
+          echo "format=$FORMAT" >> $GITHUB_OUTPUT
+          echo "date=$DATE" >> $GITHUB_OUTPUT
+          echo "project=$PROJECT" >> $GITHUB_OUTPUT
           
-          # Запись для следующих шагов
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f"format={fmt}\n")
-              f.write(f"date={dt}\n")
-              f.write(f"project={proj}\n")
-          EOF
+          echo "📅 Format: $FORMAT"
+          echo "📆 Date: $DATE"
+          echo "📦 Project: $PROJECT"
       
-      - name: Generate Content (Full Pipeline with ModelRouter)
+      - name: Generate Content (Script → TTS → Video)
         id: generate
         env:
           GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
@@ -98,114 +82,111 @@ jobs:
           DATE: ${{ steps.params.outputs.date }}
           PROJECT: ${{ steps.params.outputs.project }}
         run: |
-          # Run pipeline orchestrator and capture output to both console and log file
-          python3 -m core.orchestrators.pipeline_orchestrator \
-            --project "$PROJECT" \
-            --mode "$FORMAT" \
-            --date "$DATE" \
-            2>&1 | tee pipeline.log
-          
-          # Extract output paths for next steps
-          VIDEO_PATH=$(find output/videos -name "${FORMAT}.mp4" 2>/dev/null | head -1 || echo "")
-          METADATA_PATH=$(find output/metadata -name "${DATE}_${FORMAT}.json" 2>/dev/null | head -1 || echo "")
-          
-          # Save to GitHub outputs
-          if [ -n "$VIDEO_PATH" ]; then
-            echo "video_path=$VIDEO_PATH" >> $GITHUB_OUTPUT
-          fi
-          
-          if [ -n "$METADATA_PATH" ]; then
-            echo "metadata_path=$METADATA_PATH" >> $GITHUB_OUTPUT
-          fi
-          
-          # Display summary
-          if [ -n "$VIDEO_PATH" ] && [ -f "$VIDEO_PATH" ]; then
-            SIZE_MB=$(du -m "$VIDEO_PATH" | cut -f1)
-            echo ""
-            echo "=========================================="
-            echo "✅ Generation Complete"
-            echo "=========================================="
-            echo "Video: $VIDEO_PATH"
-            echo "Size: ${SIZE_MB} MB"
-            echo "Metadata: $METADATA_PATH"
-            echo "=========================================="
-            echo ""
-          else
-            echo "❌ Video file not found!"
-            exit 1
-          fi
-      
-      - name: Generate metadata
-        if: success()
-        env:
-          PROJECT: ${{ steps.params.outputs.project }}
-          FORMAT: ${{ steps.params.outputs.format }}
-          DATE: ${{ steps.params.outputs.date }}
-        run: |
-          python3 << 'PYTHON_META'
-          import json
+          python3 << 'PYTHON_SCRIPT'
           import os
-          from datetime import datetime
+          import sys
           from pathlib import Path
           
           project = os.getenv('PROJECT')
           fmt = os.getenv('FORMAT')
           target_date = os.getenv('DATE')
           
-          output_dir = Path(f"output/videos/{project}")
-          video_files = sorted(list(output_dir.glob(f"{fmt}.mp4"))) if output_dir.exists() else []
+          print(f"\n" + "="*70)
+          print(f"🎬 HOROSCOPE VIDEO GENERATION")
+          print(f"="*70)
+          print(f"Project: {project}")
+          print(f"Format: {fmt}")
+          print(f"Date: {target_date}\n")
           
-          if not video_files:
-              print(f"ℹ️ No video files to generate metadata for")
-              exit(0)
+          # ========== PART 1: SCRIPT GENERATION =========="
+          print(f"📝 PART 1: Script Generation")
+          print(f"-" * 70)
           
-          video_path = video_files[-1]
+          try:
+              from core.generators import script_generator
+              
+              if fmt == "shorts":
+                  script = script_generator.generate_short(target_date=target_date)
+              elif fmt == "long_form":
+                  script = script_generator.generate_long_form(target_date=target_date)
+              elif fmt == "ad":
+                  script = script_generator.generate_ad(target_date=target_date)
+              else:
+                  raise ValueError(f"Unknown format: {fmt}")
+              
+              print(f"✅ Script generated")
+              print(f"   Format: {fmt}")
+              print(f"   Length: {len(script.get('script', ''))} chars")
           
-          # Создать метаданные для платформ
-          metadata = {
-              "title": f"Гороскоп на {target_date}",
-              "description": f"Ваш личный гороскоп на {target_date}\n\nПодпишитесь на канал для новых гороскопов!",
-              "tags": ["гороскоп", "астрология", "зодиак", "астро"],
-              "category": "Entertainment",
-              "visibility": "public",
-              "format": fmt,
-              "date_generated": datetime.now().isoformat(),
-              "video_path": str(video_path),
-          }
+          except Exception as e:
+              print(f"❌ Script generation failed: {e}")
+              import traceback
+              traceback.print_exc()
+              sys.exit(1)
           
-          # Формат-специфичные параметры
-          if fmt == "shorts":
-              metadata["platform"] = ["YouTube Shorts", "TikTok", "Instagram Reels"]
-              metadata["recommended_tags"] = ["horoscope", "astrology", "zodiac", "viral"]
-          elif fmt == "long_form":
-              metadata["platform"] = ["YouTube"]
-              metadata["chapters"] = [
-                  {"title": "Любовь", "timestamp": "0:10"},
-                  {"title": "Деньги", "timestamp": "4:00"},
-                  {"title": "Здоровье", "timestamp": "8:00"},
-              ]
-          elif fmt == "ad":
-              metadata["platform"] = ["YouTube", "TikTok", "Instagram"]
-              metadata["ad_duration_sec"] = 15
+          # ========== PART 2: TTS SYNTHESIS =========="
+          print(f"\n🎙️ PART 2: TTS Synthesis")
+          print(f"-" * 70)
           
-          metadata_path = output_dir / f"metadata_{fmt}.json"
-          with open(metadata_path, 'w') as f:
-              json.dump(metadata, f, indent=2, ensure_ascii=False)
+          try:
+              from core.generators import tts_generator
+              
+              api_key = os.getenv('GOOGLE_AI_API_KEY')
+              if not api_key:
+                  raise ValueError("GOOGLE_AI_API_KEY not set!")
+              
+              audio_map = tts_generator.synthesize(
+                  script=script,
+                  mode=fmt,
+                  api_key=api_key
+              )
+              
+              print(f"✅ Audio synthesized")
+              print(f"   Duration: {audio_map.get('total_duration_sec', 0):.1f}s")
+              print(f"   Blocks: {len(audio_map.get('blocks', {}))}")
           
-          print(f"✅ Metadata generated: {metadata_path}")
-          PYTHON_META
-      
-      - name: Upload logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: generation-logs-${{ github.run_number }}
-          path: |
-            pipeline.log
-            output/metadata/
-            output/logs/
-          retention-days: 7
-          if-no-files-found: warn
+          except Exception as e:
+              print(f"❌ TTS synthesis failed: {e}")
+              import traceback
+              traceback.print_exc()
+              sys.exit(1)
+          
+          # ========== PART 3: VIDEO RENDERING =========="
+          print(f"\n🎥 PART 3: Video Rendering")
+          print(f"-" * 70)
+          
+          try:
+              from core.generators import video_renderer
+              
+              video_path = video_renderer.render(
+                  script=script,
+                  audio_map=audio_map,
+                  mode=fmt
+              )
+              
+              video_file = Path(video_path)
+              if video_file.exists():
+                  size_mb = video_file.stat().st_size / (1024*1024)
+                  print(f"✅ Video rendered: {video_path}")
+                  print(f"   Size: {size_mb:.1f} MB")
+              else:
+                  raise FileNotFoundError(f"Video file not found: {video_path}")
+          
+          except Exception as e:
+              print(f"❌ Video rendering failed: {e}")
+              import traceback
+              traceback.print_exc()
+              sys.exit(1)
+          
+          # ========== SUMMARY =========="
+          print(f"\n" + "="*70)
+          print(f"✅ SUCCESS! Video generation complete")
+          print(f"="*70)
+          print(f"Output: {video_path}")
+          print(f"Size: {size_mb:.1f} MB")
+          print(f"\nReady for publishing to YouTube, TikTok, VK, Instagram")
+          
+          PYTHON_SCRIPT
       
       - name: Upload artifacts
         if: always()
@@ -219,69 +200,28 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
       
-      - name: Create GitHub Summary
-        if: always()
-        env:
-          VIDEO_PATH: ${{ steps.generate.outputs.video_path }}
-          METADATA_PATH: ${{ steps.generate.outputs.metadata_path }}
-          FORMAT: ${{ steps.params.outputs.format }}
-          DATE: ${{ steps.params.outputs.date }}
-          PROJECT: ${{ steps.params.outputs.project }}
+      - name: Summary
+        if: success()
         run: |
-          echo "## 📊 Generation Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [ -f "$VIDEO_PATH" ]; then
-            SIZE_MB=$(du -m "$VIDEO_PATH" | cut -f1)
-            
-            echo "✅ **Status:** Success" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### 🎬 Output" >> $GITHUB_STEP_SUMMARY
-            echo "- **Video:** \`$VIDEO_PATH\`" >> $GITHUB_STEP_SUMMARY
-            echo "- **Size:** ${SIZE_MB} MB" >> $GITHUB_STEP_SUMMARY
-            echo "- **Format:** $FORMAT" >> $GITHUB_STEP_SUMMARY
-            echo "- **Date:** $DATE" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            
-            # Parse metadata if exists
-            if [ -f "$METADATA_PATH" ]; then
-              echo "### 📈 Generation Statistics" >> $GITHUB_STEP_SUMMARY
-              echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
-              cat "$METADATA_PATH" | python3 -c "import sys, json; data = json.load(sys.stdin); print(json.dumps(data.get('generation_stats', {}), indent=2))" >> $GITHUB_STEP_SUMMARY || echo "{}" >> $GITHUB_STEP_SUMMARY
-              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              
-              echo "### 📝 Script Details" >> $GITHUB_STEP_SUMMARY
-              SCRIPT_LEN=$(cat "$METADATA_PATH" | python3 -c "import sys, json; print(json.load(sys.stdin).get('script_length', 'N/A'))" 2>/dev/null || echo "N/A")
-              echo "- **Script length:** ${SCRIPT_LEN} characters" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-            fi
-            
-            echo "### 🚀 Next Steps" >> $GITHUB_STEP_SUMMARY
-            echo "1. Download artifacts from this workflow run" >> $GITHUB_STEP_SUMMARY
-            echo "2. Review video quality" >> $GITHUB_STEP_SUMMARY
-            echo "3. Publish to platforms: YouTube Shorts, TikTok, Instagram Reels" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Video file not found. Check logs for details." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "✅ Video generation complete"
+          echo "Format: ${{ steps.params.outputs.format }}"
+          echo "Date: ${{ steps.params.outputs.date }}"
+          echo ""
+          echo "📥 Download from artifacts"
+          echo "📤 Then publish to social media"
 
   notify-result:
     runs-on: ubuntu-22.04
-    needs: generate-video
-    if: always() && secrets.TELEGRAM_BOT_TOKEN
+    needs: [generate-video]
+    if: always()
     
     steps:
-      - name: Send notification
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          FORMAT: ${{ github.event.inputs.format || 'shorts' }}
-          STATUS: ${{ needs.generate-video.result }}
+      - name: Send Telegram notification
+        if: secrets.TELEGRAM_BOT_TOKEN
         run: |
+          FORMAT="${{ github.event.inputs.format || 'shorts' }}"
+          STATUS="${{ needs.generate-video.result }}"
+          
           if [ "$STATUS" = "success" ]; then
             EMOJI="✅"
             TEXT="Horoscope video generated successfully"
@@ -290,9 +230,10 @@ jobs:
             TEXT="Horoscope video generation failed"
           fi
           
-          MESSAGE="$EMOJI $TEXT%0AFormat: $FORMAT%0AWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MESSAGE="${EMOJI} ${TEXT}%0AFormat: ${FORMAT}%0AWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
           curl -s -X POST \
             -H 'Content-Type: application/x-www-form-urlencoded' \
-            -d "chat_id=$TELEGRAM_CHAT_ID&text=$MESSAGE&parse_mode=HTML" \
-            "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" > /dev/null
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}&text=$MESSAGE&parse_mode=HTML" \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" > /dev/null || true
+        continue-on-error: true
