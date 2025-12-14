@@ -64,17 +64,21 @@ def get_router(api_key: str) -> ModelRouter:
 **Impact**: Низкий - статистика небольшая
 **Fix**: Добавить метод `reset_stats()` или ограничить размер статистики
 
-### 5. Edge-TTS Rate Limiting Without Backoff
-**Файл**: `core/generators/tts_generator.py`
-**Проблема**: Нет retry логики при 403 ошибках от Microsoft
+### 5. Model Router Singleton Memory Leak
+**Файл**: `core/utils/model_router.py`
+**Проблема**: ModelRouter instance живет на протяжении всего процесса
 ```python
-# No retry logic implemented
-communicate = edge_tts.Communicate(text, voice, rate=f"{int(speed * 100)}%")
-await communicate.save(str(output_path))
+_router_instance: Optional[ModelRouter] = None
+
+def get_router(api_key: str) -> ModelRouter:
+    global _router_instance
+    if _router_instance is None:
+        _router_instance = ModelRouter(api_key)
+    return _router_instance
 ```
-**Potential Issue**: При rate limiting весь batch может падать
-**Impact**: Высокий для batch генерации
-**Fix**: Добавить retry с exponential backoff для Edge-TTS
+**Potential Issue**: В длительных процессах может накапливаться память в статистике
+**Impact**: Низкий - статистика небольшая
+**Fix**: Добавить метод `reset_stats()` или ограничить размер статистики
 
 ---
 

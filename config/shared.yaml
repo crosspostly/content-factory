@@ -24,16 +24,18 @@ debugging:
 audio:
   # Common audio settings
   enabled: true
-  fallback_engine: edge-tts
+  fallback_engine: gemini-2.5-flash-lite
+  primary_engine: gemini-2.5-flash
   engines:
-    edge-tts:
+    gemini-2.5-flash:
       enabled: true
-      speed: 1.0
-    gemini-tts:
-      enabled: false
-  background_music_enabled: true
+      # Note: Gemini TTS uses voice setting in API call, not config
+    gemini-2.5-flash-lite:
+      enabled: true
+      # Same voice setting as primary
+  background_music_enabled: false  # НЕ реализовано
   sound_effects:
-    enabled: true
+    enabled: false  # НЕ реализовано
 
 video:
   # Common video settings
