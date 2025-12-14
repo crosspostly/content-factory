@@ -1,0 +1,84 @@
+###############################################
+# 🦁 LEO HOROSCOPE PROJECT CONFIGURATION
+###############################################
+
+project:
+  name: "horoscope_leo"
+  title: "Leo Horoscope Daily"
+  description: "Daily horoscope for Leo zodiac sign"
+
+# VIDEO MODE CONFIGURATION
+video_mode: "slides"
+variant: "carousel"
+
+# CONTENT SETTINGS
+content:
+  source: "gemini"  # Generated from Gemini API
+  language: "ru"    # Russian
+  slides_count: 5
+
+# VIDEO OUTPUT SETTINGS
+output:
+  format: "mp4"
+  resolution: "1080x1920"  # Vertical (YouTube Shorts/TikTok)
+  fps: 30
+  codec: "h264"
+  audio_codec: "aac"
+  bitrate: "5000k"
+
+# SLIDE DESIGN SETTINGS
+design:
+  background_type: "gradient"  # solid, gradient
+  background_color: "#2B1B3D"  # Dark purple
+  background_secondary: "#1a0f2e"  # Darker purple for gradient
+  
+  text_color: "white"           # #ffffff
+  text_shadow: true
+  shadow_color: "#000000"
+  shadow_offset: 3
+  
+  font_size: 70
+  font_family: "Arial Bold"     # System font
+  line_height: 1.4
+  
+  # Safe area (padding from edges)
+  padding_horizontal: 40
+  padding_vertical: 200
+
+# TRANSITION SETTINGS
+transitions:
+  type: "fade"      # fade, slide, zoom
+  duration: 0.5     # seconds
+  easing: "ease-in-out"
+
+# ANIMATION SETTINGS
+animations:
+  text_animation: "slideIn"    # slideIn, fadeIn, bounce
+  animation_duration: 0.8      # seconds
+  
+# AUDIO / TTS SETTINGS
+audio:
+  enabled: true
+  tts_voice: "ru-RU-Neural2-D"  # Google Cloud TTS voice
+  speaking_rate: 1.0            # 0.25 - 4.0
+  pitch: 0.0                     # -20.0 - 20.0
+  volume: 1.0
+  
+  # Music/background audio (optional)
+  background_music: null
+  background_music_volume: 0.0
+
+# CONTENT EXAMPLE (for testing)
+example_content: |
+  Leo, today is your lucky day!
+  Money and career opportunities coming.
+  Love is in the air for singles.
+  Avoid conflicts until evening.
+  Lucky numbers: 7, 13, 25.
+
+# DEPLOYMENT SETTINGS
+deploy:
+  upload_to_youtube_shorts: false
+  upload_to_tiktok: false
+  upload_to_instagram_reels: false
+  local_storage_path: "/output/horoscope_leo/"
