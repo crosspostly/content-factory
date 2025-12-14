@@ -15,7 +15,7 @@ jobs:
   megalinter:
     runs-on: ubuntu-latest
     name: MegaLinter
-        continue-on-error: true
+    continue-on-error: true
     
     steps:
       - name: Checkout Code
@@ -35,7 +35,7 @@ jobs:
   typos:
     runs-on: ubuntu-latest
     name: Spell Check
-        continue-on-error: true
+    continue-on-error: true
     
     steps:
       - name: Checkout Code
