@@ -1,0 +1,5 @@
+{
+  "name": "Predator Shorts Studio",
+  "description": "An automated AI agent dashboard using Google Gemini 2.0 to generate hyper-realistic 'Animals vs Animals' YouTube Shorts scenarios, imagery, and video previews.",
+  "requestFramePermissions": []
+}

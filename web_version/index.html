@@ -1,0 +1,80 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Predator Shorts Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <script>
+      // Polyfill process for browser environment to avoid "process is not defined"
+      window.process = {
+        env: {
+          NODE_ENV: 'development',
+          // API_KEY is injected by the environment, we preserve existing env if any
+          ...window.process?.env
+        }
+      };
+    </script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              display: ['Cinzel', 'serif'],
+            },
+            colors: {
+              blood: '#8a0b0b',
+              gold: '#d4af37',
+              mystic: '#8b5cf6',
+              darkbg: '#0a0a0a',
+              panel: '#121212'
+            },
+            animation: {
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #050505;
+        color: #e5e5e5;
+      }
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #0a0a0a; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #333; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #555; 
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.1/client",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
+    "jszip": "https://esm.sh/jszip@3.10.1"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
