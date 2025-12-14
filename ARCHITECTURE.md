@@ -76,7 +76,7 @@ config = load("youtube_horoscope")
 
 # Работает:
 config.project.name          # → "YouTube Гороскопы"  
-config.generation.models.primary  # → "gemini-2.0-flash-exp"
+config.generation.models.primary  # → "gemini-2.5-flash"
 
 # Автоматический fallback:
 config.audio.get("edge-tts", {}).get("voice", "default_voice")

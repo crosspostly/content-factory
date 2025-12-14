@@ -158,7 +158,7 @@ class TestPipelineExecution:
             "successful": 1,
             "failed": 0,
             "success_rate": "100%",
-            "model_usage": {"gemini-2.0-flash-exp": 1}
+            "model_usage": {"gemini-2.5-flash": 1}
         }
         
         mock_script.return_value = {"id": "test_123", "hook": "Test", "_script_path": "/tmp/script.json", "script": "Test script"}
@@ -206,7 +206,7 @@ class TestPipelineExecution:
             "successful": 1,
             "failed": 0,
             "success_rate": "100%",
-            "model_usage": {"gemini-2.0-flash-exp": 1}
+            "model_usage": {"gemini-2.5-flash": 1}
         }
         
         mock_script.return_value = {

@@ -22,7 +22,7 @@ pip install -r requirements.txt
 
 ### 3. Настройка API ключей
 Добавьте в GitHub Secrets:
-- `GOOGLE_AI_API_KEY` - ключ от https://ai.google.dev
+- `GOOGLE_AI_API_KEY` - ключ от https://ai.google.dev (для Gemini 2.5 Flash)
 - `PIXABAY_API_KEY` - ключ от https://pixabay.com/api
 - `TELEGRAM_BOT_TOKEN` - токен от @BotFather (опционально)
 - `TELEGRAM_CHAT_ID` - ваш Telegram ID (опционально)

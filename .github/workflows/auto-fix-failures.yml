@@ -75,10 +75,10 @@ jobs:
           api_key = os.getenv('GEMINI_API_KEY')
           genai.configure(api_key=api_key)
 
-          # Use currently supported Gemini models.
-          # (Older 2.5* names are not available in the public API.)
-          ALLOWED_MODELS = ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro']
-          CURRENT_MODEL = 'gemini-2.0-flash-exp'
+          # Use currently supported Gemini models (December 2025).
+          # Gemini 2.5 series is the latest stable version.
+          ALLOWED_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']
+          CURRENT_MODEL = 'gemini-2.5-flash'
 
           MAX_ATTEMPTS = 10
           SUCCESS = False
