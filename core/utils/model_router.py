@@ -22,19 +22,19 @@ logger = logging.getLogger(__name__)
 MODELS = {
     "error_analysis": {
         "primary": "qwen2.5-coder:1.5b",
-        "fallback": "gemini-2.5-flash"
+        "fallback": "gemini-2.5-flash-lite"
     },
     "script": {
         "primary": "gemini-2.5-flash",
-        "fallback": "gemini-1.5-flash"
+        "fallback": "gemini-2.5-flash-lite"
     },
     "tts": {
         "primary": "gemini-2.5-flash",
-        "fallback": "gemini-1.5-flash"
+        "fallback": "gemini-2.5-flash-lite"
     },
     "image_gen": {
         "primary": "gemini-2.5-flash",
-        "fallback": "gemini-1.5-pro"
+        "fallback": "gemini-2.5-flash-lite"
     }
 }
 
