@@ -18,23 +18,23 @@ import google.generativeai as genai
 logger = logging.getLogger(__name__)
 
 # Model configuration
-# Updated Dec 2025: Use existing Gemini models (gemini-2.5-flash doesn't exist yet)
+# Updated Dec 2025: Gemini 2.5 is now available and should be used
 MODELS = {
     "error_analysis": {
         "primary": "qwen2.5-coder:1.5b",
-        "fallback": "gemini-1.5-flash"
+        "fallback": "gemini-2.5-flash"
     },
     "script": {
-        "primary": "gemini-2.0-flash-exp",
+        "primary": "gemini-2.5-flash",
         "fallback": "gemini-1.5-flash"
     },
     "tts": {
-        "primary": "gemini-2.0-flash-exp",
+        "primary": "gemini-2.5-flash",
         "fallback": "gemini-1.5-flash"
     },
     "image_gen": {
-        "primary": "gemini-2.0-flash-exp",
-        "fallback": "gemini-1.5-flash"
+        "primary": "gemini-2.5-flash",
+        "fallback": "gemini-1.5-pro"
     }
 }
 
