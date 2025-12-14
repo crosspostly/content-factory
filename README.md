@@ -2,7 +2,11 @@
 
 > **Полностью автоматизированная фабрика контента, работающая в GitHub Actions. Генерирует видео для YouTube, TikTok, Instagram, VK и управляется через Telegram Bot.**
 
-![Version](https://img.shields.io/badge/version-2.2-blue)
+**🟢 Статус**: Part 1-3 = MVP Production, Part 4-5 = Planning  
+**🎯 Версия**: 2.0 (только Gemini 2.5 Flash)  
+**📅 Обновлено**: 14 Декабря 2025
+
+![Version](https://img.shields.io/badge/version-2.0-blue)
 ![Status](https://img.shields.io/badge/status-active-green)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
@@ -22,6 +26,7 @@
 - [Part 1: Script Generation (✅ DONE)](#part-1-script-generation-done)
 - [Part 2: TTS + Audio (✅ DONE)](#part-2-tts--audio-done)
 - [Part 3: Video Rendering (✅ DONE)](#part-3-video-rendering-done)
+- [📊 Таблица: Что работает](#-таблица-что-работает)
 - [Auto-Fix Agent (🤖 AI-POWERED)](#auto-fix-agent--ai-powered)
 - [Testing (✅ DONE)](#testing)
 - [**⚡ Оптимизация и Кэширование (NEW!)](#-оптимизация-и-кэширование)
@@ -50,11 +55,10 @@
 
 ### 🎬 Генерация Контента
 
-- ✅ **Сценарии** — Gemini 2.5 Flash / Qwen (локально) / OpenRouter (Part 1 ✅)
-- ✅ **Озвучка** — Gemini 2.5 Flash TTS (высокое качество русской речи) (Part 2 ✅)
-- ✅ **Видео** — MoviePy (монтаж), Pixabay API (стоки), FFmpeg (кодирование) (Part 3 ✅)
-- 🔄 **Субтитры** — WhisperX (word-level timestamps), автосинхронизация (ffsubsync) (Part 4 🔄)
-- 🔮 **Изображения** — Stock (Pexels/Pixabay), Flux.1 (генерация), ImageMagick (обложки) (Part 4 🔮)
+- ✅ **Сценарии** — Gemini 2.5 Flash (Part 1 ✅ PRODUCTION)
+- ✅ **Озвучка** — Gemini 2.5 Flash TTS (Part 2 ✅ PRODUCTION)
+- ✅ **Видео** — MoviePy (монтаж), Pixabay API (стоки), FFmpeg (кодирование) (Part 3 ✅ MVP)
+- ❌ **Субтитры** — НЕ реализовано в Part 3 (Part 4 🔮 PLANNING)
 
 ### 📤 Публикация
 
@@ -374,6 +378,23 @@ python -m core.orchestrators.pipeline_orchestrator \
   --mode shorts \
   --full
 ```
+
+---
+
+## 📊 Таблица: Что работает
+
+| Компонент | Статус | MVP? | Production-ready? | Примечание |
+|-----------|--------|------|-------------------|-----------|
+| **Gemini 2.5 Flash (Script)** | ✅ | ✅ | ✅ | 100% работает |
+| **Gemini 2.5 Flash TTS** | ✅ | ✅ | ✅ | 100% работает |
+| **Video Rendering** | ✅ | ✅ | ⚠️ | БЕЗ субтитров |
+| **Pixabay Stock API** | ✅ | ✅ | ⚠️ | Rate limiting (50/day) |
+| **Audio Mixing** | ✅ | ✅ | ✅ | 100% работает |
+| **Subtitles** | ❌ | ❌ | ❌ | Part 4 (планирование) |
+| **YouTube Upload** | ❌ | ❌ | ❌ | Part 4 (планирование) |
+| **TikTok Upload** | ❌ | ❌ | ❌ | Part 4 (планирование) |
+
+**Критично знать**: Part 3 НЕ содержит встроенных субтитров в видео (SRT/VTT). Субтитры планируются в Part 4.
 
 ---
 

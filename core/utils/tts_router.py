@@ -10,12 +10,12 @@ def _normalize_engine_key(engine: str) -> str:
 def choose_tts_engine(config: ProjectConfig, video_type: str) -> tuple[str, str]:
     """Choose (engine_name, voice_name) for a given video type.
 
-    Engine names in config may be written with hyphens (edge-tts) while `audio.engines`
-    keys may be snake_case (edge_tts). We support both.
+    Engine names in config may be written with hyphens while `audio.engines`
+    keys may be snake_case. We support both.
     """
 
     audio = config.audio
-    preferred_engine = audio.voice_selection.get(video_type) or audio.primary_engine
+    preferred_engine = audio.primary_engine
     fallback_engine = audio.fallback_engine or audio.primary_engine
 
     for engine_name in [preferred_engine, fallback_engine]:

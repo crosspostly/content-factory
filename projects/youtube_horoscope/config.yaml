@@ -34,7 +34,7 @@ generation:
 audio:
   # Inherit from shared, override specific settings
   engines:
-    edge-tts:
+    gemini-2.5-flash:
       voice: ru-RU-DariyaNeural  # Project-specific voice
 
 # Project-specific video

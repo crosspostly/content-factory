@@ -66,13 +66,13 @@ class ConfigNode(Mapping[str, Any]):
         if key in self._data:
             return key
 
-        # Support attr access for hyphenated keys: edge_tts -> edge-tts
+        # Support attr access for hyphenated keys
         if "_" in key:
             alt = key.replace("_", "-")
             if alt in self._data:
                 return alt
 
-        # Also allow the reverse: edge-tts queried via get("edge-tts")
+        # Also allow the reverse: hyphenated keys queried via get("hyphenated-key")
         if "-" in key:
             alt = key.replace("-", "_")
             if alt in self._data:

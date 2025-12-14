@@ -32,12 +32,12 @@ class TestConfigNode:
         assert node.nested.inner == 42
 
     def test_hyphen_underscore_normalization(self):
-        node = ConfigNode({"edge-tts": {"voice": "ru-RU"}})
+        node = ConfigNode({"test-engine": {"voice": "ru-RU"}})
         # Access via underscore
-        assert node.edge_tts.voice == "ru-RU"
-        assert node.get("edge_tts").voice == "ru-RU"
+        assert node.test_engine.voice == "ru-RU"
+        assert node.get("test_engine").voice == "ru-RU"
         # Access via hyphen
-        assert node.get("edge-tts").voice == "ru-RU"
+        assert node.get("test-engine").voice == "ru-RU"
 
     def test_missing_key_returns_empty_node(self):
         node = ConfigNode({"key": "value"})
@@ -52,12 +52,12 @@ class TestConfigNode:
         assert node.get("missing", "default") == "default"
 
     def test_contains(self):
-        node = ConfigNode({"key": "value", "edge-tts": {}})
+        node = ConfigNode({"key": "value", "test-engine": {}})
         assert "key" in node
         assert "missing" not in node
         # Hyphen/underscore normalization
-        assert "edge_tts" in node
-        assert "edge-tts" in node
+        assert "test_engine" in node
+        assert "test-engine" in node
 
     def test_list_wrapping(self):
         node = ConfigNode({"items": [{"name": "a"}, {"name": "b"}]})

@@ -111,9 +111,11 @@ def mock_config():
             "max_retries": 2,
         },
         "audio": {
+            "primary_engine": "gemini-2.5-flash",
+            "fallback_engine": "gemini-2.5-flash-lite",
             "engines": {
-                "edge-tts": {
-                    "voice": "ru-RU-SvetlanaNeural",
+                "gemini-2.5-flash": {
+                    "voice": "female_neutral",
                     "speed": 1.0,
                 }
             }
@@ -156,9 +158,15 @@ def mock_config_with_qwen():
             "retry_delay_sec": 1.0,
         },
         "audio": {
+            "primary_engine": "qwen2.5-coder:1.5b",
+            "fallback_engine": "gemini-2.5-flash",
             "engines": {
-                "edge-tts": {
-                    "voice": "en-US-AriaNeural",
+                "qwen2.5-coder:1.5b": {
+                    "voice": "female_neutral",
+                    "speed": 1.0,
+                },
+                "gemini-2.5-flash": {
+                    "voice": "female_neutral",
                     "speed": 1.0,
                 }
             }

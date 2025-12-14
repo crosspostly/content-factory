@@ -24,13 +24,15 @@ debugging:
 audio:
   # Common audio settings
   enabled: true
-  fallback_engine: edge-tts
+  fallback_engine: gemini-2.5-flash-lite
+  primary_engine: gemini-2.5-flash
   engines:
-    edge-tts:
+    gemini-2.5-flash:
       enabled: true
-      speed: 1.0
-    gemini-tts:
-      enabled: false
+      voice: female_neutral
+    gemini-2.5-flash-lite:
+      enabled: true
+      voice: female_neutral
   background_music_enabled: true
   sound_effects:
     enabled: true
