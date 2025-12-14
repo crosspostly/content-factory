@@ -152,7 +152,7 @@ response = requests.get(PIXABAY_VIDEOS_API, params=params, timeout=10)
 ### 13. Deprecated Model References
 **Файл**: `core/utils/model_router.py` (исправлено)
 **Было**: `gemini-2.5-flash`, `gemini-2.5-flash-lite` (не существуют)
-**Статус**: ✅ Исправлено на `gemini-2.0-flash-exp`, `gemini-1.5-flash`
+**Статус**: ✅ Исправлено на `gemini-2.5-flash`, `gemini-2.5-flash-lite`
 
 ### 14. Unused Import in Auto-Fix Agent
 **Файл**: `core/auto_fix_agent.py`

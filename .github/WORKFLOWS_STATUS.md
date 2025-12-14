@@ -99,9 +99,9 @@ TELEGRAM_CHAT_ID: "<your-chat-id>"         # Your chat ID
 - ✅ `gemini-2.5-flash-lite` - Lightweight alternative
 
 **Forbidden:**
-- ❌ gemini-2.0-flash
-- ❌ gemini-2.0-flash-exp
-- ❌ gemini-1.5-flash (deprecated)
+- ❌ gemini-2.0-flash (deprecated)
+- ❌ gemini-2.0-flash-exp (deprecated)
+- ❌ gemini-1.5-flash (not used)
 
 ### Issue: Telegram notifications not working
 
