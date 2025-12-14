@@ -19,8 +19,8 @@ jobs:
           fetch-depth: 0
 
       - name: TODO to Issue
-            uses: alstr/todo-to-issue-action@v5
-                  with:
+        uses: alstr/todo-to-issue-action@v5
+        with:
           REPO: ${{ github.repository }}
           BEFORE: ${{ github.event.before }}
           SHA: ${{ github.sha }}
