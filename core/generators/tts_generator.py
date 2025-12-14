@@ -104,7 +104,7 @@ async def _synthesize_gemini_tts_async(
     speed: float = 1.0
 ) -> float:
     """
-    Synthesize text using Gemini 2.5 Text-to-Speech API.
+    Synthesize text using Gemini 2.0 Flash Exp Text-to-Speech API.
     Returns duration in seconds.
     
     Uses google-genai SDK with proper TTS configuration.
@@ -118,12 +118,12 @@ async def _synthesize_gemini_tts_async(
         
         logger.info(f"🔷 Sending TTS request: {len(text)} chars")
         
-        # Call Gemini 2.5 Flash with text-to-speech
+        # Call Gemini 2.0 Flash Exp with text-to-speech
         # Using audio output from content generation
         try:
             # Try with audio modality (if supported)
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash-exp",
                 contents=text  # Can pass text directly
             )
             
@@ -254,7 +254,7 @@ async def _synthesize_ad_async(
 
 def synthesize(config: ProjectConfig, script: Any, mode: str, api_key: str = None) -> dict[str, Any]:
     """
-    Main entry point for TTS synthesis using Gemini 2.5 TTS.
+    Main entry point for TTS synthesis using Gemini 2.0 Flash Exp TTS.
     
     Args:
         config: ProjectConfig with audio settings
@@ -291,7 +291,7 @@ def synthesize(config: ProjectConfig, script: Any, mode: str, api_key: str = Non
             "blocks": blocks,
             "background_music_path": None,  # Future: background music
             "sound_effects": {},  # Future: sound effects
-            "engine_used": "gemini-2.5-tts",
+            "engine_used": "gemini-2.0-flash-exp-tts",
             "total_duration_sec": total_duration,
             "sample_rate": OUTPUT_SAMPLE_RATE,
             "channels": OUTPUT_CHANNELS,
