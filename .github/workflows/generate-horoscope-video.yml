@@ -43,30 +43,33 @@ jobs:
           python-version: '3.11'
           cache: 'pip'  # ✅ Enables pip caching (~15s → ~2s on cache hit)
       
-      # ✅ Cache system apt packages (custom)
-      - name: Cache System Packages
+      # ✅ SAFE APT CACHE: Use project directory instead of /var/
+      - name: Restore APT Cache
         uses: actions/cache@v4
         with:
-          path: |
-            /var/cache/apt/archives
-            /var/lib/apt/lists
-          key: ${{ runner.os }}-apt-${{ hashFiles('.github/workflows/**') }}
+          path: ./.apt-cache
+          key: ${{ runner.os }}-apt-packages-${{ hashFiles('.github/workflows/**') }}
           restore-keys: |
-            ${{ runner.os }}-apt-
-
+            ${{ runner.os }}-apt-packages-
+      
       # ✅ OPTIMIZED: Only update apt cache if it's missing
       - name: Install system dependencies
         run: |
-          echo "🔍 Checking apt cache status..."
-          if [ ! -f "/var/lib/apt/lists/lock" ]; then
-            echo "📦 Cache miss - updating apt index..."
-            sudo apt-get update -qq
-          else
-            echo "✅ Cache hit - skipping apt update (saves ~30-35s!)"
-          fi
+          echo "🔍 Setting up APT cache directory..."
+          mkdir -p ./.apt-cache
+          export APT_CACHE_DIR="$(pwd)/.apt-cache"
           
-          echo "⚙️ Installing packages: ffmpeg, imagemagick, ghostscript..."
-          sudo apt-get install -y ffmpeg imagemagick ghostscript fonts-dejavu-core libsm6 libxext6 2>&1 | tail -5
+          echo "📦 Installing packages: ffmpeg, imagemagick, ghostscript..."
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            ffmpeg \
+            imagemagick \
+            ghostscript \
+            fonts-dejavu-core \
+            libsm6 \
+            libxext6 \
+            2>&1 | tail -5
+          
           echo "✅ System dependencies ready"
       
       - name: Install Python dependencies
