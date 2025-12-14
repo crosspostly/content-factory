@@ -10,7 +10,7 @@ Content Factory — это модульная система генерации 
 ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
 │   Script Generation │────│   TTS Synthesis     │────│   Video Rendering   │
 │                     │    │                     │    │                     │
-│ • Gemini 2.0 Flash  │    │ • Edge-TTS          │    │ • MoviePy           │
+│ • Gemini 2.5 Flash  │    │ • Edge-TTS          │    │ • MoviePy           │
 │ • ModelRouter       │    │ • Voice selection   │    │ • Pixabay API       │
 │ • Length validation │    │ • WAV output        │    │ • H.264 encoding    │
 └─────────────────────┘    └─────────────────────┘    └─────────────────────┘
@@ -33,7 +33,7 @@ Content Factory — это модульная система генерации 
 | **Script Generator** | `core/generators/script_generator.py` | Генерация текстов сценариев |
 | **Model Router** | `core/utils/model_router.py` | LLM балансировка и retry |
 | **Pipeline Orchestrator** | `core/orchestrators/pipeline_orchestrator.py` | Главный координатор |
-| **TTS Generator** | `core/generators/tts_generator.py` | Синтез речи Edge-TTS |
+| **TTS Generator** | `core/generators/tts_generator.py`
 | **Video Renderer** | `core/generators/video_renderer.py` | Создание видео |
 | **Batch Generator** | `core/generators/batch_generator.py` | Массовая генерация |
 
@@ -192,7 +192,7 @@ enhanced_prompt = prompt + f"""
 
 **ModelRouter retry flow**:
 ```
-Primary Model (gemini-2.0-flash-exp)
+Primary Model (gemini-2.5-flash)
 ├── Attempt 1 (2s wait on fail)
 ├── Attempt 2 (4s wait on fail)  
 └── Attempt 3 (8s wait on fail)
