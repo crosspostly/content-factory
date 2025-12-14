@@ -18,7 +18,7 @@ import google.generativeai as genai
 logger = logging.getLogger(__name__)
 
 # Model configuration
-# Updated Dec 2025: Qwen for error analysis, Gemini for content generation
+# Updated Dec 2025: Gemini 2.5 is now available and should be used
 MODELS = {
     "error_analysis": {
         "primary": "qwen2.5-coder:1.5b",

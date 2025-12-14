@@ -111,7 +111,7 @@ class TestSynthesizeModes:
             api_key="test-key"
         )
         
-        assert result["engine_used"] == "gemini-2.5-tts"
+        assert result["engine_used"] == "gemini-2.5-flash-tts"
         assert result["total_duration_sec"] == 10.0
         assert "main" in result["blocks"]
 
@@ -142,7 +142,7 @@ class TestSynthesizeModes:
             api_key="test-key"
         )
         
-        assert result["engine_used"] == "gemini-2.5-tts"
+        assert result["engine_used"] == "gemini-2.5-flash-tts"
         assert result["total_duration_sec"] == 15.0  # 3 blocks * 5.0
         assert len(result["blocks"]) == 3
         assert "love" in result["blocks"]
@@ -168,7 +168,7 @@ class TestSynthesizeModes:
             api_key="test-key"
         )
         
-        assert result["engine_used"] == "gemini-2.5-tts"
+        assert result["engine_used"] == "gemini-2.5-flash-tts"
         assert result["total_duration_sec"] == 3.0
         assert "main" in result["blocks"]
     
