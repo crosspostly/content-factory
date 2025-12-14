@@ -173,7 +173,7 @@ async def _synthesize_shorts_async(
     if not api_key:
         raise ValueError("GOOGLE_AI_API_KEY required for Gemini TTS")
     
-    speed = config.audio.get("engines", {}).get("gemini-tts", {}).get("speed", 1.0)
+    speed = config.audio.get("engines", {}).get("gemini-2.5-flash", {}).get("speed", 1.0)
     
     # Текст может быть в разных полях
     text = script.get("script") or script.get("narration_text") or script.get("hook", "")
@@ -202,7 +202,7 @@ async def _synthesize_long_form_async(
     if not api_key:
         raise ValueError("GOOGLE_AI_API_KEY required for Gemini TTS")
     
-    speed = config.audio.get("engines", {}).get("gemini-tts", {}).get("speed", 1.0)
+    speed = config.audio.get("engines", {}).get("gemini-2.5-flash", {}).get("speed", 1.0)
     
     project_slug = str(config.project.get("name", "project")).replace(" ", "_")
     blocks = script.get("blocks", {})
@@ -235,7 +235,7 @@ async def _synthesize_ad_async(
     if not api_key:
         raise ValueError("GOOGLE_AI_API_KEY required for Gemini TTS")
     
-    speed = config.audio.get("engines", {}).get("gemini-tts", {}).get("speed", 1.0)
+    speed = config.audio.get("engines", {}).get("gemini-2.5-flash", {}).get("speed", 1.0)
     
     text = script.get("narration_text") or script.get("script", "")
     text = _sanitize_text_for_tts(text)
