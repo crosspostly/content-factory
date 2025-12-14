@@ -29,10 +29,10 @@ audio:
   engines:
     gemini-2.5-flash:
       enabled: true
-      voice: "female-1"  # Реальный голос Gemini TTS
+      # Note: Gemini TTS uses voice setting in API call, not config
     gemini-2.5-flash-lite:
       enabled: true
-      voice: "female-1"  # Тот же голос для fallback
+      # Same voice setting as primary
   background_music_enabled: false  # НЕ реализовано
   sound_effects:
     enabled: false  # НЕ реализовано

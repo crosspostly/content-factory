@@ -115,7 +115,7 @@ def mock_config():
             "fallback_engine": "gemini-2.5-flash-lite",
             "engines": {
                 "gemini-2.5-flash": {
-                    "voice": "female_neutral",
+                    "enabled": true,
                     "speed": 1.0,
                 }
             }
@@ -162,11 +162,11 @@ def mock_config_with_qwen():
             "fallback_engine": "gemini-2.5-flash",
             "engines": {
                 "qwen2.5-coder:1.5b": {
-                    "voice": "female_neutral",
+                    "enabled": true,
                     "speed": 1.0,
                 },
                 "gemini-2.5-flash": {
-                    "voice": "female_neutral",
+                    "enabled": true,
                     "speed": 1.0,
                 }
             }

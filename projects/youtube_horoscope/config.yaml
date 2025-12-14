@@ -33,9 +33,11 @@ generation:
 # Project-specific audio
 audio:
   # Inherit from shared, override specific settings
+  # Note: Gemini TTS doesn't use config-based voice selection like Edge-TTS
   engines:
     gemini-2.5-flash:
-      voice: ru-RU-DariyaNeural  # Project-specific voice
+      enabled: true
+      # Voice selection happens in API call, not config
 
 # Project-specific video
 video:
