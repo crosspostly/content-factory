@@ -24,6 +24,7 @@ permissions:
   contents: write
   pull-requests: write
   checks: write
+  id-token: write  # Required for OIDC authentication with Google
 
 jobs:
   ai-code-review:
@@ -113,19 +114,13 @@ jobs:
         with:
           node-version: '18'
 
-      # Step 4: Install Gemini CLI
-      - name: Install Gemini CLI
-        run: |
-          echo "📦 Installing Gemini CLI..."
-          npm install -g @google/genai
-          
-          # Verify installation
-          genai --version || {
-            echo "⚠️  npx fallback: genai not found globally, will use npx"
-            npm list -g @google/genai || echo "Installing via npx approach"
-          }
-          
-          echo "✓ Gemini CLI ready"
+      # Step 4: Setup Google OIDC for authentication (via official Action)
+      - name: Setup Google OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+        if: false # We'll use the official Action which handles auth internally
 
       # Step 5: Prepare materials for Gemini CLI
       - name: Prepare materials for Gemini CLI
@@ -215,75 +210,37 @@ jobs:
       # ⭐ STEP 5: RUN GEMINI CLI CODE REVIEW (ГЛАВНОЕ!)
       - name: Run Gemini CLI code review
         id: review
-        env:
-          GENAI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || secrets.GEMINI_API_KEY }}
-        run: |
-          set -e
+        uses: google-github-actions/run-gemini-cli@v0.2.0
+        with:
+          prompt: |
+            # ИНСТРУКЦИЯ ДЛЯ AI АГЕНТА
+            @.github/gemini/code-review-prompt.md
+            
+            # РЕАЛЬНОЕ ТЗ ИЗ GITHUB ISSUE (источник правды)
+            @.gemini/issue.md
+            
+            # ДОПОЛНИТЕЛЬНЫЙ КОНТЕКСТ: ОПИСАНИЕ PR
+            @.gemini/pr-description.md
+            
+            # КОД ДЛЯ АНАЛИЗА: DIFF PR
+            @.gemini/diff.patch
+            
+            # ИНСТРУКЦИЯ: ВЫПОЛНИ ВСЕ ШАГИ АНАЛИЗА И УЛУЧШЕНИЙ
+            
+            Ты AI Code Reviewer & Auto-Fixer для этого проекта.
+            
+            Твоя задача:
+            1. Прочитай инструкцию в @.github/gemini/code-review-prompt.md
+            2. Прочитай реальное ТЗ в @.gemini/issue.md (единственный источник требований)
+            3. Прочитай diff PR (@.gemini/diff.patch) чтобы понять что изменилось
+            4. Следуй всем шагам из инструкции: анализ → планирование → правки → верификация
+            5. Правь файлы прямо в текущей ветке (все изменения будут автоматически закоммичены)
+            6. Добавляй тесты, документацию, улучшай код качество
+            7. Не придумывай требования - работай только с тем что в issue
+            8. Если неоднозначность - спроси в PR комментарии (не гадай)
           
-          if [ -z "$GENAI_API_KEY" ]; then
-            echo "❌ GENAI_API_KEY is not set"
-            echo "Please add GOOGLE_AI_API_KEY or GEMINI_API_KEY to repository secrets"
-            exit 1
-          fi
-          
-          # Настроить API ключ для Gemini CLI
-          export GENAI_API_KEY="$GENAI_API_KEY"
-          
-          echo "🤖 Running Gemini CLI code review with --yolo --checkpointing..."
-          
-          # ⭐ ЗАПУСТИТЬ GENAI С РЕЖИМОМ АВТО-ПРАВОК
-          echo "🎯 Executing Gemini CLI with auto-fix capabilities..."
-          
-          genai --yolo --checkpointing "
-# ИНСТРУКЦИИ ДЛЯ AI CODE REVIEWER
-
-Используй эту систему инструкцию:
-@.github/gemini/code-review-prompt.md
-
-# КОНТЕКСТ GITHUB ISSUE
-@.gemini/issue.md
-
-# ОПИСАНИЕ PR
-@.gemini/pr-description.md
-
-# КОД ДЛЯ АНАЛИЗА И ПРАВКИ
-@.gemini/diff.patch
-
-# ДЕЙСТВИЯ:
-1. Проанализируй код против требований issue
-2. Найди bugs, style issues, missing tests
-3. ПРАВЬ ФАЙЛЫ В ВЕТКЕ (используй --yolo --checkpointing режим)
-4. Верифицируй что код правильный
-5. Выведи результат в JSON формате
-" || {
-            echo "⚠️ Gemini CLI with --yolo --checkpointing completed"
-            echo "Note: Files may have been modified by AI agent"
-          }
-          
-          echo "✓ Gemini CLI review completed!"
-          
-          # Получить JSON результат для следующего шага
-          echo "📊 Generating JSON summary..."
-          genai --output json "
-Используй эту инструкцию: @.github/gemini/code-review-prompt.md
-Анализируй код: @.gemini/diff.patch  
-Выведи результат в JSON формате
-" > .gemini/review-result.json 2>/dev/null || {
-            echo "⚠️ Could not get JSON output, creating fallback"
-            cat > .gemini/review-result.json << 'EOF'
-{
-  "overall_rating": "⚠️ REVIEW",
-  "summary": "Code review completed by Gemini CLI",
-  "issue_number": 0,
-  "checklist_items": [],
-  "issues": [],
-  "improvements": ["Review completed - check files for AI modifications"],
-  "files_modified": []
-}
-EOF
-          }
-          
-          echo "✓ JSON result saved to .gemini/review-result.json"
+          allow-no-changes: true
+          auto-commit: false  # We'll do manual commit to control message
 
       # STEP 6: Auto-fix: Commit and push changes (if any)
       - name: Commit and push changes to PR branch
