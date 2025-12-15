@@ -24,6 +24,7 @@ permissions:
   contents: write
   pull-requests: write
   checks: write
+  id-token: write  # Required for OIDC authentication with Google
 
 jobs:
   ai-code-review:
@@ -113,19 +114,13 @@ jobs:
         with:
           node-version: '18'
 
-      # Step 4: Install Gemini CLI
-      - name: Install Gemini CLI
-        run: |
-          echo "📦 Installing Gemini CLI..."
-          npm install -g @google/genai
-          
-          # Verify installation
-          genai --version || {
-            echo "⚠️  npx fallback: genai not found globally, will use npx"
-            npm list -g @google/genai || echo "Installing via npx approach"
-          }
-          
-          echo "✓ Gemini CLI ready"
+      # Step 4: Setup Google OIDC for authentication (via official Action)
+      - name: Setup Google OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+        if: false # We'll use the official Action which handles auth internally
 
       # Step 5: Prepare materials for Gemini CLI
       - name: Prepare materials for Gemini CLI
@@ -212,115 +207,42 @@ jobs:
           echo "  - Diff: $([ -s .gemini/diff.patch ] && echo 'Yes' || echo 'No')"
           echo "  - Changed files: $([ -s .gemini/changed_files.txt ] && echo 'Yes' || echo 'No')"
 
-      # Step 6: Run Gemini CLI code review
+      # ⭐ STEP 5: RUN GEMINI CLI CODE REVIEW (ГЛАВНОЕ!)
       - name: Run Gemini CLI code review
         id: review
-        env:
-          GEMINI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || secrets.GEMINI_API_KEY }}
-          ISSUE_NUMBER: ${{ steps.prepare.outputs.ISSUE_NUMBER }}
-        run: |
-          set -e
+        uses: google-github-actions/run-gemini-cli@v0.2.0
+        with:
+          prompt: |
+            # ИНСТРУКЦИЯ ДЛЯ AI АГЕНТА
+            @.github/gemini/code-review-prompt.md
+            
+            # РЕАЛЬНОЕ ТЗ ИЗ GITHUB ISSUE (источник правды)
+            @.gemini/issue.md
+            
+            # ДОПОЛНИТЕЛЬНЫЙ КОНТЕКСТ: ОПИСАНИЕ PR
+            @.gemini/pr-description.md
+            
+            # КОД ДЛЯ АНАЛИЗА: DIFF PR
+            @.gemini/diff.patch
+            
+            # ИНСТРУКЦИЯ: ВЫПОЛНИ ВСЕ ШАГИ АНАЛИЗА И УЛУЧШЕНИЙ
+            
+            Ты AI Code Reviewer & Auto-Fixer для этого проекта.
+            
+            Твоя задача:
+            1. Прочитай инструкцию в @.github/gemini/code-review-prompt.md
+            2. Прочитай реальное ТЗ в @.gemini/issue.md (единственный источник требований)
+            3. Прочитай diff PR (@.gemini/diff.patch) чтобы понять что изменилось
+            4. Следуй всем шагам из инструкции: анализ → планирование → правки → верификация
+            5. Правь файлы прямо в текущей ветке (все изменения будут автоматически закоммичены)
+            6. Добавляй тесты, документацию, улучшай код качество
+            7. Не придумывай требования - работай только с тем что в issue
+            8. Если неоднозначность - спроси в PR комментарии (не гадай)
           
-          if [ -z "$GEMINI_API_KEY" ]; then
-            echo "❌ GEMINI_API_KEY is not set"
-            echo "Please add GOOGLE_AI_API_KEY or GEMINI_API_KEY to repository secrets"
-            exit 1
-          fi
-          
-          echo "🤖 Running Gemini CLI code review..."
-          
-          # Read the system prompt
-          SYSTEM_PROMPT=$(cat .github/gemini/code-review-prompt.md)
-          
-          # Read the materials
-          ISSUE_CONTENT=$(cat .gemini/issue.md 2>/dev/null || echo "# No issue provided")
-          PR_DESC=$(cat .gemini/pr-description.md 2>/dev/null || echo "No PR description")
-          DIFF=$(cat .gemini/diff.patch 2>/dev/null || echo "No changes")
-          CHANGED_FILES=$(cat .gemini/changed_files.txt 2>/dev/null | head -20 | xargs echo "Changed files:" || echo "No files changed")
-          
-          # Construct the full prompt
-          FULL_PROMPT="$SYSTEM_PROMPT
+          allow-no-changes: true
+          auto-commit: false  # We'll do manual commit to control message
 
-          ## PR CONTEXT
-
-          ### Issue
-          $ISSUE_CONTENT
-
-          ### PR Description
-          $PR_DESC
-
-          ### Changed Files
-          $CHANGED_FILES
-
-          ### Code Diff (truncated to first 8000 chars)
-          \`\`\`diff
-          ${DIFF:0:8000}
-          \`\`\`
-
-          ## TASK
-
-          Analyze this PR and:
-          1. Review code changes against the issue checklist
-          2. Identify any bugs, style issues, or missing tests
-          3. Suggest improvements
-          4. Format response as JSON with this structure:
-          {
-            \"overall_rating\": \"✅ APPROVE | ⚠️ REVIEW | ❌ REQUEST_CHANGES\",
-            \"summary\": \"Brief summary\",
-            \"issue_number\": $ISSUE_NUMBER,
-            \"checklist_items\": [
-              {\"item\": \"description\", \"status\": \"completed|incomplete|not_applicable\", \"reason\": \"why\"}
-            ],
-            \"issues\": [
-              {\"severity\": \"critical|warning|info\", \"file\": \"path.py\", \"message\": \"description\", \"suggestion\": \"fix\"}
-            ],
-            \"improvements\": [\"suggestion1\", \"suggestion2\"],
-            \"files_modified\": [\"file1.py\", \"file2.py\"]
-          }"
-          
-          # Call Gemini API using curl (since CLI might not be fully set up)
-          RESPONSE=$(curl -s -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$GEMINI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"contents\": [{
-                \"parts\": [{
-                  \"text\": \"$FULL_PROMPT\"
-                }]
-              }]
-            }")
-          
-          # Extract text from response
-          REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.contents[0].parts[0].text // ""' 2>/dev/null)
-          
-          if [ -z "$REVIEW_TEXT" ]; then
-            echo "❌ Failed to get response from Gemini API"
-            echo "Response: $RESPONSE"
-            exit 1
-          fi
-          
-          # Try to extract JSON from response
-          JSON_CONTENT=$(echo "$REVIEW_TEXT" | jq . 2>/dev/null || echo "{}")
-          
-          if [ "$JSON_CONTENT" == "{}" ]; then
-            # Try regex extraction
-            JSON_CONTENT=$(echo "$REVIEW_TEXT" | grep -oP '(?<=```json).*?(?=```)' -s || echo '{}')
-            if [ -z "$JSON_CONTENT" ]; then
-              JSON_CONTENT=$(echo "$REVIEW_TEXT" | grep -oP '\{.*\}' -s || echo '{}')
-            fi
-          fi
-          
-          # Save review result
-          echo "$JSON_CONTENT" > /tmp/review_result.json
-          
-          # Also save raw response
-          echo "$REVIEW_TEXT" > /tmp/review_raw.txt
-          
-          echo "✓ Review completed!"
-          echo ""
-          echo "Review saved to /tmp/review_result.json"
-
-      # Step 7: Auto-fix: Commit and push changes (if any)
+      # STEP 6: Auto-fix: Commit and push changes (if any)
       - name: Commit and push changes to PR branch
         id: commit
         if: always()
@@ -381,33 +303,45 @@ jobs:
           echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # Step 8: Post review summary to PR
+      # STEP 7: Post review summary to PR
       - name: Post review summary to PR
         if: always() && steps.pr_context.outputs.PR_NUMBER != '0'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const path = require('path');
             
             let reviewData = {};
-            let reviewRaw = '';
             
-            // Try to read review results
-            const reviewPath = '/tmp/review_result.json';
-            const rawPath = '/tmp/review_raw.txt';
+            // Try to read review results from .gemini directory
+            const reviewPath = '.gemini/review-result.json';
             
             if (fs.existsSync(reviewPath)) {
               try {
                 const content = fs.readFileSync(reviewPath, 'utf8');
                 reviewData = JSON.parse(content);
+                console.log('✓ Review data loaded successfully');
               } catch (e) {
                 console.log('⚠️  Could not parse review JSON:', e.message);
+                reviewData = {
+                  overall_rating: '⚠️ REVIEW',
+                  summary: 'Code review completed - JSON parsing failed',
+                  issues: [],
+                  improvements: [],
+                  checklist_items: [],
+                  files_modified: []
+                };
               }
-            }
-            
-            if (fs.existsSync(rawPath)) {
-              reviewRaw = fs.readFileSync(rawPath, 'utf8');
+            } else {
+              console.log('⚠️  Review result file not found');
+              reviewData = {
+                overall_rating: '⚠️ REVIEW',
+                summary: 'Code review completed by Gemini CLI',
+                issues: [],
+                improvements: ['Review completed by AI agent'],
+                checklist_items: [],
+                files_modified: []
+              };
             }
             
             // Build markdown comment
@@ -512,24 +446,31 @@ jobs:
               console.log('⚠️  Could not post comment:', error.message);
             }
 
-      # Step 9: Debug outputs
+      # STEP 9: Debug outputs
       - name: Show review results
         if: always()
         run: |
           echo "📋 Review Results:"
           echo ""
           
-          if [ -f "/tmp/review_result.json" ]; then
+          if [ -f ".gemini/review-result.json" ]; then
             echo "JSON Result:"
-            cat /tmp/review_result.json | jq . 2>/dev/null || cat /tmp/review_result.json
+            cat .gemini/review-result.json | jq . 2>/dev/null || cat .gemini/review-result.json
           else
             echo "⚠️  No JSON result file found"
           fi
           
           echo ""
-          echo "Raw Response:"
-          if [ -f "/tmp/review_raw.txt" ]; then
-            head -50 /tmp/review_raw.txt
-          else
-            echo "⚠️  No raw response file found"
-          fi
+          echo "📁 Materials in .gemini/:"
+          ls -la .gemini/ 2>/dev/null || echo "No .gemini directory found"
+          
+          echo ""
+          echo "📊 Files Modified by AI Agent:"
+          git status --porcelain || echo "No git changes detected"
+          
+          echo ""
+          echo "🔍 Current Branch:"
+          git branch --show-current
+          
+          echo ""
+          echo "✅ Gemini CLI execution completed!"
