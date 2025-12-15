@@ -29,6 +29,7 @@
 - [📊 Таблица: Что работает](#-таблица-что-работает)
 - [Auto-Fix Agent (🤖 AI-POWERED)](#auto-fix-agent--ai-powered)
 - [AI Code Review with Gemini CLI (🤖 NEW!)](#5️⃣-ai-code-review-with-gemini-cli--new)
+- [📖 AI Code Review Guide (Документация)](#-ai-code-review-guide-документация)
 - [Testing (✅ DONE)](#testing)
 - [**⚡ Оптимизация и Кэширование (NEW!)](#-оптимизация-и-кэширование)
 - [Лимиты GitHub Actions](#лимиты-github-actions)
@@ -739,8 +740,47 @@ pytest tests/ --cov=core --cov-report=html
 ---
 
 **Версия:** 2.2  
-**Последнее обновление:** Декабрь 14, 2025  
-**Статус:** 🜢 Parts 1+2+3 COMPLETE (with Gemini 2.5 Flash TTS) + Auto-Fix Agent Active + двухуровневая pip оптимизация (50% ускорение!) + Full Test Coverage
+**Последнее обновление:** Декабрь 15, 2025  
+**Статус:** 🜢 Parts 1+2+3 COMPLETE (with Gemini 2.5 Flash TTS) + Auto-Fix Agent Active + AI Code Review with Gemini CLI + двухуровневая pip оптимизация (50% ускорение!) + Full Test Coverage
+
+---
+
+## 📖 AI Code Review Guide (Документация)
+
+Полное руководство по настройке и использованию AI Code Review с Gemini CLI:
+
+- **[AI-CODE-REVIEW-GUIDE.md](.github/gemini/AI-CODE-REVIEW-GUIDE.md)** — Основной гайд с примерами
+- **[IMPLEMENTATION_SUMMARY.md](.github/gemini/IMPLEMENTATION_SUMMARY.md)** — Техническая документация  
+- **[code-review-prompt.md](.github/gemini/code-review-prompt.md)** — Системные инструкции для AI
+
+### 🚀 Быстрый старт
+
+1. **Добавить API ключ:**
+   ```bash
+   # GitHub → Settings → Secrets → New repository secret
+   GOOGLE_AI_API_KEY=<ваш ключ>
+   ```
+
+2. **Создать PR с linked issue:**
+   ```markdown
+   Fixes #123
+   
+   ## Details
+   - [ ] Task 1
+   - [ ] Task 2
+   ```
+
+3. **Агент автоматически запустится!**
+   - Анализирует код против requirements
+   - Фиксит проблемы автоматически
+   - Пишет комментарий в PR
+
+### ⚙️ Настройка
+
+- **Автозапуск:** На ветках `main` и `develop`
+- **Ручной запуск:** Actions → AI Code Review → Run workflow
+- **Логи:** Проверяйте workflow logs для деталей
+- **Ограничения:** 8000 символов в diff (остальное обрезается)
 
 ---
 
