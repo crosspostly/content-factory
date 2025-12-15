@@ -1,0 +1,638 @@
+name: Workflow Diagnostics & Auto-Fix
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+
+  workflow_run:
+    workflows:
+      - AI Code Review with Gemini CLI
+      - Auto-Fix Test Failures
+      - Run Tests
+      - Run Tests in Docker
+      - Code Quality & Linting
+      - Release Drafter
+      - TODO to Issue
+      - Notifications & Alerts
+      - Cleanup Old Artifacts
+      - 🐳 Build and Push Docker Image
+      - Generate Horoscope Video
+      - Generate Batch Horoscopes
+      - Test Pipeline Mocks
+    types: [completed]
+
+  workflow_dispatch:
+    inputs:
+      workflow_name:
+        description: 'Workflow file name (e.g., ai-code-review.yml) or workflow display name (empty = all)'
+        required: false
+        type: string
+      runs_to_scan:
+        description: 'Recent runs per workflow to scan'
+        required: false
+        type: string
+        default: '5'
+      auto_fix:
+        description: 'Enable auto-fix mode (may modify .github/workflows)'
+        required: false
+        type: boolean
+        default: false
+      create_issue:
+        description: 'Create/update issue if problems found'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: read
+  pull-requests: write
+  issues: write
+  checks: read
+
+jobs:
+  diagnose-workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect workflow logs
+        id: collect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_NAME_INPUT: ${{ github.event.inputs.workflow_name || '' }}
+          RUNS_TO_SCAN: ${{ github.event.inputs.runs_to_scan || '5' }}
+          WORKFLOW_RUN_WORKFLOW_ID: ${{ github.event.workflow_run.workflow_id || '' }}
+          WORKFLOW_RUN_NAME: ${{ github.event.workflow_run.name || '' }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p .workflow-diagnostics/logs
+
+          echo "EVENT_NAME=$EVENT_NAME"
+          echo "WORKFLOW_NAME_INPUT=$WORKFLOW_NAME_INPUT"
+          echo "RUNS_TO_SCAN=$RUNS_TO_SCAN"
+
+          TARGET_WORKFLOW_ID=""
+          if [ "$EVENT_NAME" = "workflow_run" ] && [ -n "$WORKFLOW_RUN_WORKFLOW_ID" ]; then
+            TARGET_WORKFLOW_ID="$WORKFLOW_RUN_WORKFLOW_ID"
+            echo "Triggered from workflow_run: $WORKFLOW_RUN_NAME ($TARGET_WORKFLOW_ID)"
+          fi
+
+          WORKFLOWS_TSV=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows" --paginate -q '.workflows[] | [.id,.name,.path] | @tsv')
+
+          WORKFLOWS_SCANNED=0
+          RUNS_SCANNED=0
+          LOG_FILES=0
+
+          : > .workflow-diagnostics/workflows.jsonl
+          : > .workflow-diagnostics/runs.jsonl
+
+          while IFS=$'\t' read -r WF_ID WF_NAME WF_PATH; do
+            if [ -z "$WF_ID" ]; then
+              continue
+            fi
+
+            if [ -n "$TARGET_WORKFLOW_ID" ] && [ "$WF_ID" != "$TARGET_WORKFLOW_ID" ]; then
+              continue
+            fi
+
+            if [ -n "$WORKFLOW_NAME_INPUT" ]; then
+              if [[ "$WF_PATH" != *"$WORKFLOW_NAME_INPUT"* ]] && [[ "$WF_NAME" != *"$WORKFLOW_NAME_INPUT"* ]]; then
+                continue
+              fi
+            fi
+
+            WORKFLOWS_SCANNED=$((WORKFLOWS_SCANNED + 1))
+
+            jq -n --arg id "$WF_ID" --arg name "$WF_NAME" --arg path "$WF_PATH" \
+              '{id:$id,name:$name,path:$path}' >> .workflow-diagnostics/workflows.jsonl
+
+            SAFE_NAME=$(echo "$WF_PATH" | sed -E 's|^\.github/workflows/||' | sed -E 's|[^A-Za-z0-9._-]+|_|g')
+            WF_DIR=".workflow-diagnostics/logs/$SAFE_NAME"
+            mkdir -p "$WF_DIR"
+
+            RUNS_TSV=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WF_ID/runs?per_page=$RUNS_TO_SCAN" \
+              -q '.workflow_runs[] | [.id,(.status//""),(.conclusion//""),(.created_at//""),(.html_url//"")] | @tsv' || true)
+
+            if [ -z "$RUNS_TSV" ]; then
+              continue
+            fi
+
+            while IFS=$'\t' read -r RUN_ID RUN_STATUS RUN_CONCLUSION RUN_CREATED_AT RUN_URL; do
+              if [ -z "$RUN_ID" ]; then
+                continue
+              fi
+
+              RUNS_SCANNED=$((RUNS_SCANNED + 1))
+
+              jq -n \
+                --arg workflow_id "$WF_ID" \
+                --arg workflow_name "$WF_NAME" \
+                --arg workflow_path "$WF_PATH" \
+                --arg run_id "$RUN_ID" \
+                --arg status "$RUN_STATUS" \
+                --arg conclusion "$RUN_CONCLUSION" \
+                --arg created_at "$RUN_CREATED_AT" \
+                --arg url "$RUN_URL" \
+                '{workflow_id:$workflow_id,workflow_name:$workflow_name,workflow_path:$workflow_path,run_id:$run_id,status:$status,conclusion:$conclusion,created_at:$created_at,url:$url}' \
+                >> .workflow-diagnostics/runs.jsonl
+
+              LOG_PATH="$WF_DIR/${RUN_ID}.log"
+              if gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --log > "$LOG_PATH" 2>&1; then
+                true
+              else
+                echo "Failed to fetch logs for run $RUN_ID" >> "$LOG_PATH"
+              fi
+
+              LOG_FILES=$((LOG_FILES + 1))
+
+            done <<< "$RUNS_TSV"
+
+          done <<< "$WORKFLOWS_TSV"
+
+          echo "WORKFLOWS_SCANNED=$WORKFLOWS_SCANNED" >> "$GITHUB_OUTPUT"
+          echo "RUNS_SCANNED=$RUNS_SCANNED" >> "$GITHUB_OUTPUT"
+          echo "LOG_FILES=$LOG_FILES" >> "$GITHUB_OUTPUT"
+
+          jq -n \
+            --arg event_name "$EVENT_NAME" \
+            --arg workflow_name_input "$WORKFLOW_NAME_INPUT" \
+            --arg runs_to_scan "$RUNS_TO_SCAN" \
+            --argjson workflows_scanned "$WORKFLOWS_SCANNED" \
+            --argjson runs_scanned "$RUNS_SCANNED" \
+            --argjson log_files "$LOG_FILES" \
+            '{event_name:$event_name,workflow_name_input:$workflow_name_input,runs_to_scan:$runs_to_scan,workflows_scanned:$workflows_scanned,runs_scanned:$runs_scanned,log_files:$log_files}' \
+            > .workflow-diagnostics/collection-summary.json
+
+      - name: Validate YAML syntax
+        id: validate_yaml
+        run: |
+          set -euo pipefail
+
+          mkdir -p .workflow-diagnostics
+
+          if ! python3 -c "import yaml" >/dev/null 2>&1; then
+            python3 -m pip install -q pyyaml
+          fi
+
+          python3 << 'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          import yaml
+
+          results = []
+
+          for p in sorted(Path('.github/workflows').glob('*.y*ml')):
+            item = {
+              'file': str(p),
+              'ok': True,
+              'errors': [],
+              'warnings': [],
+              'uses_issues': [],
+            }
+            try:
+              raw = p.read_text(encoding='utf-8')
+              data = yaml.safe_load(raw)
+              if not isinstance(data, dict):
+                item['ok'] = False
+                item['errors'].append('Root is not a mapping')
+              else:
+                # PyYAML treats YAML 1.1 booleans like "on" as True.
+                has_on = ('on' in data) or (True in data)
+                if 'name' not in data:
+                  item['warnings'].append('Missing top-level key: name')
+                if not has_on:
+                  item['warnings'].append('Missing top-level key: on')
+                if 'jobs' not in data:
+                  item['warnings'].append('Missing top-level key: jobs')
+
+                jobs = data.get('jobs') or {}
+                if isinstance(jobs, dict):
+                  for job_id, job in jobs.items():
+                    steps = (job or {}).get('steps') or []
+                    if not isinstance(steps, list):
+                      continue
+                    for idx, step in enumerate(steps):
+                      if not isinstance(step, dict):
+                        continue
+                      uses = step.get('uses')
+                      if not uses:
+                        continue
+                      if isinstance(uses, str) and not uses.startswith('./') and '@' not in uses:
+                        item['uses_issues'].append(
+                          {
+                            'job': job_id,
+                            'step_index': idx,
+                            'uses': uses,
+                            'issue': 'Action reference should include @ref (e.g., owner/repo@v4)',
+                          }
+                        )
+            except Exception as e:
+              item['ok'] = False
+              item['errors'].append(str(e))
+
+            results.append(item)
+
+          Path('.workflow-diagnostics/yaml-validation.json').write_text(
+            json.dumps({'results': results}, ensure_ascii=False, indent=2),
+            encoding='utf-8',
+          )
+
+          errors = sum(1 for r in results if not r['ok'])
+          warnings = sum(len(r['warnings']) + len(r['uses_issues']) for r in results)
+
+          Path('.workflow-diagnostics/yaml-validation.txt').write_text(
+            '\n'.join(
+              [
+                f"{r['file']}: {'OK' if r['ok'] else 'ERROR'}" +
+                ("\n  - " + "\n  - ".join(r['errors']) if r['errors'] else '') +
+                ("\n  - " + "\n  - ".join(r['warnings']) if r['warnings'] else '') +
+                ("\n  - " + "\n  - ".join([u['uses'] + ': ' + u['issue'] for u in r['uses_issues']]) if r['uses_issues'] else '')
+                for r in results
+              ]
+            ) + '\n',
+            encoding='utf-8',
+          )
+
+          print(f"YAML_FILES={len(results)}")
+          print(f"YAML_ERRORS={errors}")
+          print(f"YAML_WARNINGS={warnings}")
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as f:
+            f.write(f"YAML_FILES={len(results)}\n")
+            f.write(f"YAML_ERRORS={errors}\n")
+            f.write(f"YAML_WARNINGS={warnings}\n")
+          PY
+
+      - name: Parse logs for errors
+        id: parse_logs
+        run: |
+          set -euo pipefail
+
+          mkdir -p .workflow-diagnostics
+
+          python3 << 'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          patterns = [
+            r'\bERROR\b',
+            r'\bFAIL\b',
+            r'\bException\b',
+            r'error:',
+            r'fatal:',
+            r'panic:',
+            r'undefined',
+            r'null reference',
+            r'connection timeout',
+            r'command not found',
+            r'npm WARN',
+            r'Deprecated',
+          ]
+
+          rx = re.compile('|'.join(f'({p})' for p in patterns), re.IGNORECASE)
+
+          findings = []
+
+          for log_file in sorted(Path('.workflow-diagnostics/logs').rglob('*.log')):
+            rel = log_file.relative_to(Path('.workflow-diagnostics/logs'))
+            workflow = str(rel.parts[0])
+            run_id = log_file.stem
+
+            try:
+              content = log_file.read_text(encoding='utf-8', errors='ignore')
+            except Exception:
+              continue
+
+            for i, line in enumerate(content.splitlines(), start=1):
+              if not rx.search(line):
+                continue
+
+              severity = 'warning'
+              if re.search(r'(ERROR|FAIL|Exception|fatal:|panic:|command not found|connection timeout|null reference)', line, re.IGNORECASE):
+                severity = 'error'
+
+              findings.append(
+                {
+                  'workflow': workflow,
+                  'run_id': run_id,
+                  'log_file': str(log_file),
+                  'line': i,
+                  'severity': severity,
+                  'text': line.strip()[:500],
+                }
+              )
+
+          out = {
+            'total': len(findings),
+            'errors': sum(1 for f in findings if f['severity'] == 'error'),
+            'warnings': sum(1 for f in findings if f['severity'] == 'warning'),
+            'findings': findings,
+          }
+
+          Path('.workflow-diagnostics/errors-found.json').write_text(
+            json.dumps(out, ensure_ascii=False, indent=2),
+            encoding='utf-8',
+          )
+          PY
+
+          TOTAL=$(jq -r '.total' .workflow-diagnostics/errors-found.json)
+          ERRORS=$(jq -r '.errors' .workflow-diagnostics/errors-found.json)
+          WARNINGS=$(jq -r '.warnings' .workflow-diagnostics/errors-found.json)
+
+          echo "TOTAL=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "ERRORS=$ERRORS" >> "$GITHUB_OUTPUT"
+          echo "WARNINGS=$WARNINGS" >> "$GITHUB_OUTPUT"
+
+      - name: Analyze with Gemini
+        id: analyze
+        env:
+          GEMINI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || secrets.GEMINI_API_KEY || '' }}
+          GEMINI_MODEL: gemini-2.5-flash
+          AUTO_FIX: ${{ github.event.inputs.auto_fix || 'false' }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p .workflow-diagnostics
+
+          if [ ! -f .workflow-diagnostics/errors-found.json ]; then
+            echo '{"total":0,"errors":0,"warnings":0,"findings":[]}' > .workflow-diagnostics/errors-found.json
+          fi
+
+          if [ ! -f .workflow-diagnostics/yaml-validation.txt ]; then
+            echo "No YAML validation results" > .workflow-diagnostics/yaml-validation.txt
+          fi
+
+          if [ -z "$GEMINI_API_KEY" ]; then
+            {
+              echo "# Workflow Diagnostics Report"
+              echo ""
+              echo "Gemini API key is not set (GOOGLE_AI_API_KEY or GEMINI_API_KEY)."
+              echo ""
+              echo "## YAML validation"
+              echo "\`\`\`"
+              sed -n '1,200p' .workflow-diagnostics/yaml-validation.txt
+              echo "\`\`\`"
+              echo ""
+              echo "## Log findings"
+              echo "\`\`\`json"
+              sed -n '1,200p' .workflow-diagnostics/errors-found.json
+              echo "\`\`\`"
+            } > .workflow-diagnostics/analysis-report.md
+            exit 0
+          fi
+
+          PROMPT=$(cat .github/gemini/workflow-diagnostics-prompt.md)
+
+          WORKFLOWS_SUMMARY=$(sed -n '1,400p' .workflow-diagnostics/yaml-validation.txt)
+          FINDINGS_JSON=$(cat .workflow-diagnostics/errors-found.json)
+
+          CONTEXT_FILES=$(python3 << 'PY'
+          from pathlib import Path
+
+          out = []
+          for p in sorted(Path('.github/workflows').glob('*.y*ml')):
+            text = p.read_text(encoding='utf-8', errors='ignore')
+            if len(text) > 4000:
+              text = text[:4000] + "\n...<truncated>...\n"
+            out.append(f"## {p}\n```yaml\n{text}\n```\n")
+          print("\n".join(out))
+          PY
+          )
+
+          MODE_LINE="MODE: ANALYSIS ONLY"
+          if [ "$AUTO_FIX" = "true" ]; then
+            MODE_LINE="MODE: AUTO-FIX (return a unified diff patch for .github/workflows only)"
+          fi
+
+          FULL_PROMPT="$PROMPT\n\n$MODE_LINE\n\n## YAML VALIDATION\n\n$WORKFLOWS_SUMMARY\n\n## LOG FINDINGS (JSON)\n\n$FINDINGS_JSON\n\n## WORKFLOW FILES (truncated)\n\n$CONTEXT_FILES"
+
+          jq -n --arg text "$FULL_PROMPT" '{contents:[{parts:[{text:$text}]}]}' > /tmp/gemini_payload.json
+
+          curl -sS -X POST \
+            "https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d @/tmp/gemini_payload.json \
+            > /tmp/gemini_response.json || true
+
+          GEMINI_TEXT=$(jq -r '.candidates[0].content.parts[0].text // ""' /tmp/gemini_response.json 2>/dev/null || echo "")
+
+          if [ -z "$GEMINI_TEXT" ]; then
+            echo "# Workflow Diagnostics Report" > .workflow-diagnostics/analysis-report.md
+            echo "" >> .workflow-diagnostics/analysis-report.md
+            echo "Gemini returned empty response." >> .workflow-diagnostics/analysis-report.md
+            echo "" >> .workflow-diagnostics/analysis-report.md
+            echo "\`\`\`json" >> .workflow-diagnostics/analysis-report.md
+            cat /tmp/gemini_response.json >> .workflow-diagnostics/analysis-report.md
+            echo "\`\`\`" >> .workflow-diagnostics/analysis-report.md
+            exit 0
+          fi
+
+          echo "$GEMINI_TEXT" > .workflow-diagnostics/analysis-report.md
+
+          if [ "$AUTO_FIX" = "true" ]; then
+            python3 << 'PY'
+          import re
+          from pathlib import Path
+
+          text = Path('.workflow-diagnostics/analysis-report.md').read_text(encoding='utf-8', errors='ignore')
+
+          m = re.search(r"```diff\n(.*?)\n```", text, re.DOTALL | re.IGNORECASE)
+          if not m:
+            m = re.search(r"```patch\n(.*?)\n```", text, re.DOTALL | re.IGNORECASE)
+
+          if m:
+            Path('.workflow-diagnostics/suggested-fix.patch').write_text(m.group(1).strip() + "\n", encoding='utf-8')
+          PY
+          fi
+
+      - name: Apply & commit fixes
+        id: commit
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.auto_fix == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [ -f .workflow-diagnostics/suggested-fix.patch ]; then
+            echo "Applying patch from Gemini..."
+            git apply --whitespace=fix .workflow-diagnostics/suggested-fix.patch || {
+              echo "Patch apply failed" >&2
+              exit 1
+            }
+          fi
+
+          if git diff --quiet -- .github/workflows; then
+            echo "HAS_CHANGES=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Ensure we are on a branch
+          git fetch origin "$GITHUB_REF_NAME" || true
+          git checkout -B "$GITHUB_REF_NAME" "origin/$GITHUB_REF_NAME" || git checkout -B "$GITHUB_REF_NAME"
+
+          git config user.name "AI Workflow Diagnostics"
+          git config user.email "diagnostics@github.local"
+
+          git add .github/workflows
+          git commit -m "fix: auto-fixed workflow issues" || {
+            echo "HAS_CHANGES=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          git push origin "$GITHUB_REF_NAME"
+          echo "HAS_CHANGES=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update diagnostic issue
+        id: issue
+        if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_run' || github.event.inputs.create_issue == 'true')
+        uses: actions/github-script@v7
+        env:
+          WORKFLOWS_SCANNED: ${{ steps.collect.outputs.WORKFLOWS_SCANNED }}
+          RUNS_SCANNED: ${{ steps.collect.outputs.RUNS_SCANNED }}
+          YAML_ERRORS: ${{ steps.validate_yaml.outputs.YAML_ERRORS }}
+          YAML_WARNINGS: ${{ steps.validate_yaml.outputs.YAML_WARNINGS }}
+          LOG_ERRORS: ${{ steps.parse_logs.outputs.ERRORS }}
+          LOG_WARNINGS: ${{ steps.parse_logs.outputs.WARNINGS }}
+          AUTO_FIX: ${{ github.event.inputs.auto_fix || 'false' }}
+          HAS_CHANGES: ${{ steps.commit.outputs.HAS_CHANGES || 'false' }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            const reportPath = '.workflow-diagnostics/analysis-report.md';
+            const report = fs.existsSync(reportPath) ? fs.readFileSync(reportPath, 'utf8') : 'No analysis report generated.';
+
+            const yamlErrors = Number(process.env.YAML_ERRORS || '0');
+            const yamlWarnings = Number(process.env.YAML_WARNINGS || '0');
+            const logErrors = Number(process.env.LOG_ERRORS || '0');
+            const logWarnings = Number(process.env.LOG_WARNINGS || '0');
+
+            const problems = yamlErrors + logErrors + yamlWarnings + logWarnings;
+
+            const labels = ['workflow-diagnostics', 'auto-generated'];
+
+            const { owner, repo } = context.repo;
+
+            const existing = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'open',
+              labels: labels[0],
+              per_page: 10,
+            });
+
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const title = `Workflow Diagnostics Report - ${new Date().toISOString().slice(0, 10)}`;
+
+            const body = [
+              `## Summary`,
+              `- Workflows scanned: ${process.env.WORKFLOWS_SCANNED || '0'}`,
+              `- Runs scanned: ${process.env.RUNS_SCANNED || '0'}`,
+              `- YAML errors: ${yamlErrors}`,
+              `- YAML warnings: ${yamlWarnings}`,
+              `- Log errors: ${logErrors}`,
+              `- Log warnings: ${logWarnings}`,
+              `- Auto-fix requested: ${process.env.AUTO_FIX}`,
+              `- Auto-fix applied: ${process.env.HAS_CHANGES}`,
+              `- Run: ${runUrl}`,
+              ``,
+              `---`,
+              ``,
+              report.length > 60000 ? report.slice(0, 60000) + '\n\n...<truncated>...' : report,
+            ].join('\n');
+
+            if (problems === 0) {
+              if (existing.data.length > 0) {
+                for (const issue of existing.data) {
+                  await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: 'closed' });
+                }
+              }
+              core.setOutput('issue_number', '');
+              return;
+            }
+
+            if (existing.data.length > 0) {
+              const issue = existing.data[0];
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, title, body });
+              core.setOutput('issue_number', String(issue.number));
+              return;
+            }
+
+            let created;
+            try {
+              created = await github.rest.issues.create({
+                owner,
+                repo,
+                title,
+                body,
+                labels,
+              });
+            } catch (e) {
+              core.warning(`Could not create issue with labels (${labels.join(', ')}): ${e.message}`);
+              created = await github.rest.issues.create({
+                owner,
+                repo,
+                title,
+                body,
+              });
+
+              try {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: created.data.number,
+                  labels,
+                });
+              } catch (e2) {
+                core.warning(`Could not add labels: ${e2.message}`);
+              }
+            }
+
+            core.setOutput('issue_number', String(created.data.number));
+
+      - name: Post summary
+        if: always()
+        run: |
+          set -euo pipefail
+
+          {
+            echo "## Workflow Diagnostics Summary"
+            echo ""
+            echo "- Workflows scanned: ${{ steps.collect.outputs.WORKFLOWS_SCANNED }}"
+            echo "- Runs scanned: ${{ steps.collect.outputs.RUNS_SCANNED }}"
+            echo "- YAML errors: ${{ steps.validate_yaml.outputs.YAML_ERRORS }}"
+            echo "- YAML warnings: ${{ steps.validate_yaml.outputs.YAML_WARNINGS }}"
+            echo "- Log errors: ${{ steps.parse_logs.outputs.ERRORS }}"
+            echo "- Log warnings: ${{ steps.parse_logs.outputs.WARNINGS }}"
+
+            if [ -n "${{ steps.issue.outputs.issue_number }}" ]; then
+              echo "- Issue: https://github.com/${{ github.repository }}/issues/${{ steps.issue.outputs.issue_number }}"
+            fi
+
+            echo ""
+            if [ -f .workflow-diagnostics/analysis-report.md ]; then
+              echo "### Gemini report (first 120 lines)"
+              echo "\`\`\`"
+              sed -n '1,120p' .workflow-diagnostics/analysis-report.md
+              echo "\`\`\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload diagnostics artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-diagnostics-report
+          path: .workflow-diagnostics/
+          retention-days: 30

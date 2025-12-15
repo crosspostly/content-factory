@@ -27,6 +27,7 @@ ENV/
 # Project caches & outputs
 .cache/
 output/
+.workflow-diagnostics/
 
 # OS / editor
 .DS_Store
