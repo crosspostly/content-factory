@@ -178,9 +178,25 @@
 
 ---
 
+#### 10. **MODEL_STANDARDIZATION.md**
+- **Purpose:** Ensure all workflows use consistent Gemini 2.5 Flash models
+- **Audience:** Developers, code reviewers, maintainers
+- **Length:** ~400 lines
+- **Topics:**
+  - Compliance status of all workflows and code
+  - Supported vs deprecated models reference
+  - Verification checklist for code review
+  - Enforcement rules for new PRs
+  - Migration path if old models found
+  - Standards and best practices
+
+**Read this if:** You're reviewing code with Gemini models or updating workflows.
+
+---
+
 ### Utilities
 
-#### 10. **file-manager.py**
+#### 11. **file-manager.py**
 - **Purpose:** Python utility for safe file operations
 - **Audience:** Developers, AI agent
 - **Type:** Executable Python script
@@ -265,8 +281,9 @@ python3 .github/gemini/file-manager.py manifest
 | EXAMPLE_TASK.md | Markdown | 650 | Real-world example |
 | IMPLEMENTATION_SUMMARY.md | Markdown | 300 | Technical details |
 | DEPLOYMENT_CHECKLIST.md | Markdown | 300 | Deployment guide |
+| MODEL_STANDARDIZATION.md | Markdown | 400 | Gemini model standards |
 | file-manager.py | Python | 380 | File operation utility |
-| **TOTAL** | | **3,226** | **Complete system** |
+| **TOTAL** | | **3,626** | **Complete system** |
 
 ---
 
@@ -298,6 +315,11 @@ EXAMPLE_TASK.md
 
 file-manager.py
 └── used by: WORKFLOW_ENHANCED.md
+
+MODEL_STANDARDIZATION.md
+├── references: ai-code-review.yml
+├── references: auto-fix-failures.yml
+└── references: core/utils/model_router.py
 ```
 
 ---
