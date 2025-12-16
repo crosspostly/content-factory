@@ -239,7 +239,7 @@ content-factory/
 │
 ├── 📁 .github/
 │   └── workflows/
-│       ├── auto-fix-agent.yml            # 🤖 Auto-Fix с Gemini/Qwen
+│       ├── auto-fix-failures.yml         # 🤖 Auto-Fix с Gemini/Qwen
 │       ├── tests.yml                     # ✅ GitHub Actions для Part 1 (ОПТИМИЗИРОВАНО!)
 │       └── generate-batch.yml            # ✅ GitHub Actions (ОПТИМИЗИРОВАНО!)
 │

@@ -1,11 +1,13 @@
 name: AI Code Review with Gemini CLI
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches:
-      - main
-      - develop
+  # 🔴 DISABLED by default - OIDC not configured
+  # Enable manually when OIDC setup is complete
+  # pull_request:
+  #   types: [opened, synchronize, reopened]
+  #   branches:
+  #     - main
+  #     - develop
 
   workflow_dispatch:
     inputs:
