@@ -2,9 +2,9 @@
 
 > **Полностью автоматизированная фабрика контента, работающая в GitHub Actions. Генерирует видео для YouTube, TikTok, Instagram, VK и управляется через Telegram Bot.**
 
-**🟢 Статус**: Part 1-3 = MVP Production, Part 4-5 = Planning  
+**🟡 Статус**: Part 1 = Production, Part 2 = ❌ Broken (Silent TTS), Part 3 = ⚠️ Incomplete (Pixabay issue), Part 4-5 = Planning  
 **🎯 Версия**: 2.0 (только Gemini 2.5 Flash)  
-**📅 Обновлено**: 14 Декабря 2025
+**📅 Обновлено**: 16 Декабря 2025
 
 ![Version](https://img.shields.io/badge/version-2.0-blue)
 ![Status](https://img.shields.io/badge/status-active-green)
@@ -58,25 +58,25 @@
 ### 🎬 Генерация Контента
 
 - ✅ **Сценарии** — Gemini 2.5 Flash (Part 1 ✅ PRODUCTION)
-- ✅ **Озвучка** — Gemini 2.5 Flash TTS (Part 2 ✅ PRODUCTION)
-- ✅ **Видео** — MoviePy (монтаж), Pixabay API (стоки), FFmpeg (кодирование) (Part 3 ✅ MVP)
-- ❌ **Субтитры** — НЕ реализовано в Part 3 (Part 4 🔮 PLANNING)
+- ❌ **Озвучка** — НЕ РАБОТАЕТ (создает тишину вместо голоса) (Part 2 ❌ BROKEN)
+- ⚠️ **Видео** — MoviePy (монтаж), проблемы с Pixabay API, FFmpeg (кодирование) (Part 3 ⚠️ INCOMPLETE)
+- ❌ **Субтитры** — НЕ реализовано (Part 4 🔮 PLANNING)
 
 ### 📤 Публикация
 
-- 🔮 **YouTube** — автоматическая загрузка, плейлисты, расписание
-- 🔮 **TikTok** — API / браузер-бот
-- 🔮 **Instagram** — автоматизация
-- 🔮 **VK** — API интеграция
-- 🔮 **Telegram** — распространение готовых видео
+- ❌ **YouTube** — НЕ РЕАЛИЗОВАНО (`raise NotImplementedError` в `youtube_uploader.py`)
+- ❌ **TikTok** — НЕ РЕАЛИЗОВАНО 
+- ❌ **Instagram** — НЕ РЕАЛИЗОВАНО
+- ❌ **VK** — НЕ РЕАЛИЗОВАНО
+- ❌ **Telegram** — НЕ РЕАЛИЗОВАНО
 
 ### 🎮 Управление
 
-- ✅ **GitHub Actions** — расписание, ручной запуск, webhook'u
+- ✅ **GitHub Actions** — расписание, ручной запуск
 - ✅ **Config-driven** — все настройки в YAML (нуль кода для нового проекта)
 - 🤖 **Auto-Fix Agent** — AI-powered исправление ошибок
-- 🔮 **Telegram Bot** — пульт управления (запуск, статус, отмена)
-- 🔮 **Очередь задач** — приоритизация проектов
+- ❌ **Telegram Bot** — НЕ РЕАЛИЗОВАНО (НЕТ ТЕЛЕГРАМ БОТА)
+- ❌ **Очередь задач** — НЕ РЕАЛИЗОВАНО
 
 ### ⚡ Оптимизация
 
@@ -92,7 +92,7 @@
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                    GitHub Actions Trigger                            │
-│    (Расписание + Вручную + Telegram Bot Webhook)                    │
+│              (Расписание + Вручную) NO TELEGRAM BOT               │
 └──────────────────────────────────────────────────────────────────┘
                  │
                  ▼ [⚡ АГРЕССИВНОЕ КШИРОВАНИЕ ⚡]
@@ -105,20 +105,19 @@
         └──────────────────────────────────────────────────┘
                  │
         ┌──────────────────────────────────────────────────┐
-        │  2️⃣ ОЗВУЧКА (Part 2 ✅)                 │
-        │  ├─ Gemini 2.5 Flash TTS (основная)  │
-        │  ├─ Высокое качество руссской речи  │
-        │  └─ Output: segment_*.wav (22050 Hz)  │
-        │  ⏱️ 2-3 мин                           │
+        │  2️⃣ ОЗВУЧКА (Part 2 ❌ BROKEN)         │
+        │  ├─ Gemini 2.5 Flash TTS (ПРОБЛЕМА)   │
+        │  ├─ Создает тихие WAV файлы            │
+        │  └─ ❌ НЕ ВОСПРОИЗВОДИТ ГОЛОС         │
+        │  ⏱️ 0 мин (создание тишины)           │
         └──────────────────────────────────────────────────┘
                  │
         ┌──────────────────────────────────────────────────┐
-        │  3️⃣ ВИДЕО РЕНДЕРИНГ (Part 3 ✅)           │
+        │  3️⃣ ВИДЕО РЕНДЕРИНГ (Part 3 ⚠️)           │
         │  ├─ MoviePy (основной монтаж)            │
-        │  ├─ Pixabay API (стоки)                  │
+        │  ├─ ⚠️ Pixabay API (незавершенная логика)│
         │  ├─ FFmpeg (кодирование H.264)          │
-        │  ├─ Субтитры (встроенные SRT)           │
-        │  └─ Output: video.mp4 (1080x1920, 30fps) │
+        │  └─ ❌ БЕЗ субтитров (НЕ РЕАЛИЗОВАНО)   │
         │  ⏱️ 5-10 мин                              │
         └──────────────────────────────────────────────────┘
                  │
@@ -206,15 +205,15 @@ content-factory/
 ├── 📁 core/                              # Общие модули
 │   ├── generators/
 │   │   ├── script_generator.py           # ✅ Part 1: Генерация сценариев
-│   │   ├── tts_generator.py              # ✅ Part 2: Озвучка (Gemini 2.5 TTS)
-│   │   ├── video_renderer.py             # ✅ Part 3: Видео (MoviePy)
+│   │   ├── tts_generator.py              # ❌ Part 2: НЕ РАБОТАЕТ (создает тишину)
+│   │   ├── video_renderer.py             # ⚠️ Part 3: НЕЗАВЕРШЕННАЯ Pixabay логика
 │   │   └── audio_utils.py                # ✅ Part 2/3: Помощники аудио
 │   │
-│   ├── content_modes/                    # 🎯 NEW: Модульные режимы видео
+│   ├── content_modes/                    # 🎯 НЕ ИНТЕГРИРОВАН в pipeline
 │   │   ├── base.py                       # Базовый класс для режимов
 │   │   ├── registry.py                   # Реестр режимов
 │   │   └── slides_mode/
-│   │       ├── mode.py                   # ✅ Slides Mode (carousel видео)
+│   │       ├── mode.py                   # ❌ НЕ ИСПОЛЬЗУЕТСЯ в pipeline
 │   │       ├── slide_builder.py          # Разбиение текста на слайды
 │   │       └── slide_renderer.py         # Рендеринг слайдов в изображения
 │   │
@@ -224,15 +223,15 @@ content-factory/
 │   │   └── retry_manager.py              # ✅ Переитримы
 │   │
 │   ├── uploaders/
-│   │   ├── youtube_uploader.py           # 🔮 Part 4
-│   │   ├── tiktok_uploader.py            # 🔮 Part 4
-│   │   └── vk_uploader.py                # 🔮 Part 4
+│   │   ├── youtube_uploader.py           # ❌ Part 4: `raise NotImplementedError`
+│   │   ├── tiktok_uploader.py            # ❌ НЕ РЕАЛИЗОВАНО
+│   │   └── vk_uploader.py                # ❌ НЕ РЕАЛИЗОВАНО
 │   │
 │   ├── utils/
 │   │   ├── config_loader.py              # ✅ Загружение YAML конфигов
 │   │   ├── secrets_manager.py            # ✅ GitHub Secrets
-│   │   ├── model_router.py               # ✅ LLM балансирование (Gemini/Qwen)
-│   │   └── notification_sender.py        # 🔮 Telegram уведомления
+│   │   ├── model_router.py               # ✅ ТОЛЬКО Gemini 2.5 Flash (Edge-TTS удален)
+│   │   └── notification_sender.py        # ❌ НЕ РЕАЛИЗОВАНО
 │   │
 │   └── models/
 │       ├── config_schema.py              # ✅ Pydantic модели
@@ -396,20 +395,53 @@ python -m core.orchestrators.pipeline_orchestrator \
 | Компонент | Статус | MVP? | Production-ready? | Примечание |
 |-----------|--------|------|-------------------|-----------|
 | **Gemini 2.5 Flash (Script)** | ✅ | ✅ | ✅ | 100% работает |
-| **Gemini 2.5 Flash TTS** | ✅ | ⚠️ | ⚠️ | Только голос, БЕЗ музыки |
-| **Video Rendering** | ✅ | ✅ | ⚠️ | БЕЗ субтитров, БЕЗ музыки |
-| **Slides Mode (NEW!)** | ✅ | ✅ | ✅ | Carousel видео из текста (Issue #43) |
-| **Pixabay Stock API** | ✅ | ✅ | ⚠️ | Rate limiting (50/day) |
-| **Audio Mixing (Voice Only)** | ✅ | ⚠️ | ⚠️ | Только голосовые блоки |
+| **Gemini 2.5 Flash TTS** | ❌ | ❌ | ❌ | НЕ РАБОТАЕТ - создает тихие WAV |
+| **Video Rendering** | ⚠️ | ⚠️ | ❌ | НЕЗАВЕРШЕННАЯ Pixabay логика |
+| **Slides Mode** | ❌ | ❌ | ❌ | НЕ ИНТЕГРИРОВАН в pipeline |
+| **Pixabay Stock API** | ⚠️ | ⚠️ | ❌ | Незавершенная логика (строки 88-99) |
+| **Audio Mixing (Silence)** | ❌ | ❌ | ❌ | Только тихие файлы |
 | **Background Music** | ❌ | ❌ | ❌ | НЕ реализовано |
 | **Sound Effects** | ❌ | ❌ | ❌ | НЕ реализовано |
 | **Subtitles** | ❌ | ❌ | ❌ | Полностью отсутствует |
-| **YouTube Upload** | ❌ | ❌ | ❌ | Part 4 (планирование) |
-| **TikTok Upload** | ❌ | ❌ | ❌ | Part 4 (планирование) |
+| **YouTube Upload** | ❌ | ❌ | ❌ | `raise NotImplementedError` |
+| **TikTok Upload** | ❌ | ❌ | ❌ | НЕ реализовано |
+| **Telegram Bot** | ❌ | ❌ | ❌ | НЕ реализовано |
 
-**🚨 КРИТИЧНО**: Part 2/3 НЕ содержат фоновую музыку, звуковые эффекты или субтитры. Это только голосовые блоки.
+**🚨 КРИТИЧЕСКИЕ ПРОБЛЕМЫ**:
 
-**Критично знать**: Part 3 НЕ содержит встроенных субтитров в видео (SRT/VTT). Субтитры планируются в Part 4.
+1. **TTS СОЗДАЕТ ТИШИНУ** - `core/generators/tts_generator.py:149` создает silent WAV
+2. **PIXABAY ЛОГИКА НЕЗАВЕРШЕНА** - `core/generators/video_renderer.py:88-99` incomplete
+3. **UPLOADERS НЕ РЕАЛИЗОВАНЫ** - все содержат `raise NotImplementedError`
+4. **TELEGRAM BOT НЕ СУЩЕСТВУЕТ** - не найден в коде
+
+---
+
+## 🔧 Ссылки на реальные ограничения
+
+### ❌ TTS / Аудио
+- **Файл**: `core/generators/tts_generator.py`
+- **Проблема**: Строка 149 - создание silent WAV вместо голоса
+- **Результат**: Все видео без озвучки
+
+### ⚠️ Видео рендеринг  
+- **Файл**: `core/generators/video_renderer.py`
+- **Проблема**: Строки 88-99 - незавершенная логика Pixabay API
+- **Результат**: Fallback на gradient backgrounds
+
+### ❌ Публикация
+- **Файлы**: `core/uploaders/*.py` (youtube_uploader.py, tiktok_uploader.py, vk_uploader.py)
+- **Проблема**: Все содержат `raise NotImplementedError`
+- **Результат**: Невозможна автоматическая публикация
+
+### ❌ Управление
+- **Проблема**: НЕТ Telegram Bot в коде
+- **Документация**: README.md и другие файлы ложно утверждают о его существовании
+- **Результат**: Пользователи ожидают несуществующую функциональность
+
+### ⚠️ Модули контента
+- **Файлы**: `core/content_modes/slides_mode/`
+- **Проблема**: НЕ ИНТЕГРИРОВАН в pipeline
+- **Результат**: Slides Mode не используется в процессе генерации
 
 ---
 

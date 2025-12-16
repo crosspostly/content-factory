@@ -2,6 +2,19 @@
 
 ## 🚨 Critical Bugs
 
+### 0. TTS Generator Creates Silent WAV (CRITICAL)
+**Файл**: `core/generators/tts_generator.py`
+**Строка**: 149
+**Проблема**: Функция создает тихие WAV файлы вместо синтеза речи
+```python
+# КРИТИЧЕСКАЯ ОШИБКА:
+logger.warning(f"⚠️ Gemini TTS returned no audio, created silent placeholder")
+return estimated_duration  # Создает ТИШИНУ!
+```
+**Impact**: КРИТИЧЕСКИЙ - все видео получаются без озвучки
+**Fix**: Исправить Gemini TTS API integration или использовать другой TTS engine
+**Статус**: ❌ НЕ ИСПРАВЛЕНО
+
 ### 1. Video Renderer Incomplete Logic
 **Файл**: `core/generators/video_renderer.py`
 **Строка**: 88-99
@@ -19,7 +32,40 @@ for fmt in ["large", "medium", "small", "tiny"]: # Comment indicates wrong forma
 **Impact**: Средний - fallback на gradient backgrounds работает
 **Fix**: Завершить логику для Pixabay video formats или удалить неиспользуемый код
 
-### 2. Missing Error Handling in Batch Generator
+### 2. Uploaders Not Implemented (CRITICAL)
+**Файлы**: `core/uploaders/*.py`
+**Проблема**: Все uploader'ы содержат только `raise NotImplementedError`
+```python
+# youtube_uploader.py, tiktok_uploader.py, vk_uploader.py - ВСЕ ОДИНАКОВЫЕ:
+def upload(config: ProjectConfig, video_path: Path, script: Any, mode: str) -> str:
+    raise NotImplementedError("YouTube uploader will be implemented in Part 4")
+```
+**Impact**: КРИТИЧЕСКИЙ - невозможна автоматическая публикация
+**Fix**: Реализовать в Part 4 или временно удалить из документации
+**Статус**: ❌ НЕ ИСПРАВЛЕНО
+
+### 3. Telegram Bot Non-existent (HIGH)
+**Проблема**: В документации упоминается Telegram Bot, но его НЕТ в коде
+```python
+# TODO во многих местах:
+# "Telegram Bot" - упоминается в README.md, но НЕ РЕАЛИЗОВАН
+# notification_sender.py содержит заглушки
+```
+**Impact**: ВЫСОКИЙ - вводит в заблуждение пользователей
+**Fix**: Либо реализовать, либо удалить из документации
+**Статус**: ❌ НЕ ИСПРАВЛЕНО
+
+### 4. Services Layer Missing (MEDIUM)
+**Ожидаемое**: `services/` directory с внешними интеграциями
+**Реальность**: НЕТ services/ directory в проекте
+**Файлы, которые ссылаются на несуществующие сервисы**:
+- `WORKFLOW_FIX_SUMMARY.md` - упоминает services layer
+- `README.md` - говорит о "Services layer" который должен быть
+**Impact**: СРЕДНИЙ - документация не соответствует реальности
+**Fix**: Создать services layer или обновить документацию
+**Статус**: ❌ НЕ ИСПРАВЛЕНО
+
+### 5. Missing Error Handling in Batch Generator
 **Файл**: `core/generators/batch_generator.py`
 **Строка**: 105
 **Проблема**: Не обрабатываются ошибки ModelRouter.get_stats() если router не инициализирован
