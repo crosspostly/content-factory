@@ -27,15 +27,16 @@ Content Factory — это модульная система генерации 
 
 ### Основные компоненты
 
-| Компонент | Файл | Ответственность |
-|-----------|------|---------------|
-| **Config Loader** | `core/utils/config_loader.py` | Загрузка и валидация YAML конфигов |
-| **Script Generator** | `core/generators/script_generator.py` | Генерация текстов сценариев |
-| **Model Router** | `core/utils/model_router.py` | LLM балансировка и retry (Gemini 2.5 only) |
-| **Pipeline Orchestrator** | `core/orchestrators/pipeline_orchestrator.py` | Главный координатор |
-| **TTS Generator** | `core/generators/tts_generator.py` | Синтез речи Gemini 2.5 TTS |
-| **Video Renderer** | `core/generators/video_renderer.py` | Создание видео |
-| **Batch Generator** | `core/generators/batch_generator.py` | Массовая генерация |
+| Компонент | Файл | Ответственность | Статус |
+|-----------|------|---------------|--------|
+| **Config Loader** | `core/utils/config_loader.py` | Загрузка и валидация YAML конфигов | ✅ Работает |
+| **Script Generator** | `core/generators/script_generator.py` | Генерация текстов сценариев | ✅ Работает |
+| **Model Router** | `core/utils/model_router.py` | LLM балансировка и retry (Gemini 2.5 only) | ✅ Работает |
+| **Pipeline Orchestrator** | `core/orchestrators/pipeline_orchestrator.py` | Главный координатор | ✅ Работает |
+| **TTS Generator** | `core/generators/tts_generator.py` | Синтез речи Gemini 2.5 TTS | ❌ НЕ РАБОТАЕТ |
+| **Video Renderer** | `core/generators/video_renderer.py` | Создание видео | ⚠️ НЕЗАВЕРШЕН |
+| **Batch Generator** | `core/generators/batch_generator.py` | Массовая генерация | ✅ Работает |
+| **YouTube Uploader** | `core/uploaders/youtube_uploader.py` | Загрузка на YouTube | ❌ НЕ РЕАЛИЗОВАНО |
 
 ---
 
@@ -111,6 +112,44 @@ Fallback Model (gemini-2.5-flash-lite)
     ↓ (success or final failure)
 Return Result or Exception
 ```
+
+---
+
+## 🚨 Критические проблемы архитектуры
+
+### ❌ TTS Generator - Silent WAV Bug
+**Файл**: `core/generators/tts_generator.py`
+**Проблема**: Строка 149 создает silent WAV файлы вместо синтеза речи
+```python
+# КРИТИЧЕСКАЯ ОШИБКА в _synthesize_gemini_tts_async():
+logger.warning(f"⚠️ Gemini TTS returned no audio, created silent placeholder")
+return estimated_duration  # Это создает тишину!
+```
+**Влияние**: Видео не имеют озвучки, только тишина
+**Решение**: Исправить Gemini TTS API integration
+
+### ⚠️ Video Renderer - Incomplete Pixabay Logic
+**Файл**: `core/generators/video_renderer.py`
+**Проблема**: Строки 88-99 - незавершенная логика обработки Pixabay video formats
+```python
+# НЕЗАВЕРШЕННЫЙ КОД:
+for fmt in ["large", "medium", "small", "tiny"]:
+    pass  # НЕ ЗАВЕРШЕНО!
+```
+**Влияние**: Fallback на gradient backgrounds вместо стокового видео
+**Решение**: Завершить или удалить неиспользуемый код
+
+### ❌ Uploaders - NotImplementedError
+**Файлы**: `core/uploaders/*.py`
+**Проблема**: Все uploader'ы содержат только `raise NotImplementedError`
+**Влияние**: Невозможна автоматическая публикация
+**Решение**: Реализовать в Part 4
+
+### ❌ Services Layer - Non-existent
+**Ожидаемое**: `services/` directory с интеграциями
+**Реальность**: НЕТ services/ directory в проекте
+**Влияние**: Нет внешних сервисов (Telegram bot, external APIs)
+**Решение**: Создать в будущих частях
 
 ---
 
