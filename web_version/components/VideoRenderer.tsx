@@ -382,10 +382,20 @@ export const VideoRenderer: React.FC<VideoRendererProps> = (props) => {
          if (voiceBuf) finalDuration = voiceBuf.duration + 2;
          else if (bgmBuf) finalDuration = 30;
 
-         // CAPPING for Shorts
+         // SMART DURATION CAPPING for Shorts (Issue #59)
          if (videoFormat === 'VERTICAL' && finalDuration > 60) {
-             addLog(`⚠️ Capping duration to 59s for Shorts (was ${finalDuration.toFixed(0)}s)`);
-             finalDuration = 59;
+             const maxDuration = 59.9; // Safe limit just under 60s for YouTube Shorts
+             const originalDuration = finalDuration;
+             
+             if (finalDuration > 120) {
+                 // For videos over 2 minutes, cap to max duration
+                 finalDuration = maxDuration;
+                 addLog(`🕒 Capped duration to ${finalDuration}s for Shorts (was ${originalDuration.toFixed(1)}s)`);
+             } else {
+                 // For shorter videos, scale proportionally to fit under the limit
+                 finalDuration = Math.min(finalDuration * (maxDuration / 60), maxDuration);
+                 addLog(`⚡ Scaled duration to ${finalDuration.toFixed(1)}s for Shorts (was ${originalDuration.toFixed(1)}s)`);
+             }
          }
 
          addLog(`Step 2: Building Timeline (${finalDuration.toFixed(1)}s)...`);
