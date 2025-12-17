@@ -85,6 +85,40 @@ class TestGeminiTTSSynthesis:
         assert duration == 5.0
         mock_convert.assert_called_once()
     
+    @patch("core.generators.tts_generator._convert_mp3_to_wav")
+    @patch("core.generators.tts_generator.genai.Client")
+    def test_synthesize_gemini_tts_retry(self, mock_client_class, mock_convert, tmp_path):
+        """Test Gemini TTS retry on failure."""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        
+        mock_response = MagicMock()
+        mock_response.audio = b"mock_mp3_data"
+        
+        # First call raises Exception ("429"), second call returns success
+        mock_client.models.generate_content.side_effect = [
+            Exception("429 Resource Exhausted"),
+            mock_response
+        ]
+        
+        mock_convert.return_value = 5.0
+        
+        # Run
+        # We need to mock asyncio.sleep to avoid waiting in tests
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            duration = asyncio.run(tts_generator._synthesize_gemini_tts_async(
+                api_key="test-key",
+                text="Test text",
+                output_path=tmp_path / "test.wav",
+                speed=1.0
+            ))
+            
+            assert duration == 5.0
+            # Should be called twice
+            assert mock_client.models.generate_content.call_count == 2
+            mock_sleep.assert_called_once()
+
+    
     def test_synthesize_missing_api_key(self, mock_config, sample_script_shorts):
         """Test that synthesis without API key raises error."""
         with pytest.raises(ValueError, match="GOOGLE_AI_API_KEY"):
