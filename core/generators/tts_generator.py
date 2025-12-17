@@ -120,21 +120,32 @@ async def _synthesize_gemini_tts_async(
         
         # Call Gemini 2.5 Flash with text-to-speech
         # Using audio output from content generation
-        try:
-            # Try with audio modality (if supported)
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=text  # Can pass text directly
-            )
-            
-            # Check if response has audio attribute
-            if hasattr(response, 'audio') and response.audio:
-                audio_data = response.audio
-                duration = _convert_mp3_to_wav(audio_data, output_path)
-                logger.info(f"✅ Gemini TTS synthesized: {len(text)} chars -> {output_path}")
-                return duration
-        except Exception as e:
-            logger.warning(f"⚠️ Audio generation attempt failed: {e}")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Try with audio modality (if supported)
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=text  # Can pass text directly
+                )
+                
+                # Check if response has audio attribute
+                if hasattr(response, 'audio') and response.audio:
+                    audio_data = response.audio
+                    duration = _convert_mp3_to_wav(audio_data, output_path)
+                    logger.info(f"✅ Gemini TTS synthesized: {len(text)} chars -> {output_path}")
+                    return duration
+            except Exception as e:
+                # Check for quota error (429)
+                error_msg = str(e).lower()
+                if "429" in error_msg or "quota" in error_msg or "resource_exhausted" in error_msg:
+                    if attempt < max_retries - 1:
+                        wait_time = (attempt + 1) * 20  # 20s, 40s (increased wait time)
+                        logger.warning(f"⏳ Quota exceeded (429). Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                        await asyncio.sleep(wait_time)
+                        continue
+                
+                logger.warning(f"⚠️ Audio generation attempt {attempt+1} failed: {e}")
         
         # Fallback: estimate duration based on text length
         # Average Russian speech rate: ~150 words per minute

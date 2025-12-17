@@ -10,6 +10,11 @@ import random
 import requests
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+
+# Monkey patch for MoviePy compatibility with Pillow 10+
+if not hasattr(Image, 'ANTIALIAS'):
+    Image.ANTIALIAS = Image.LANCZOS
+
 from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 from moviepy.editor import (
     CompositeVideoClip, CompositeAudioClip,
