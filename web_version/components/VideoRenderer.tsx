@@ -533,7 +533,7 @@ export const VideoRenderer: React.FC<VideoRendererProps> = (props) => {
       let imgCounter = 0;
       for (const [key, dataUrl] of Object.entries(images)) {
           if (!dataUrl) continue;
-          const base64Data = dataUrl.split(',')[1];
+          const base64Data = (dataUrl as string).split(',')[1];
           const fileName = `image_${imgCounter}.png`;
           if (imgCounter === 0) mainImage = fileName; // Use first image as main
           assets?.file(fileName, base64Data, {base64: true});
