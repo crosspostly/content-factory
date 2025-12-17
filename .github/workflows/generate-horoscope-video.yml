@@ -29,6 +29,9 @@ jobs:
   generate-video:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    outputs:
+      video_path: ${{ steps.generate.outputs.video_path }}
+      video_size: ${{ steps.generate.outputs.video_size }}
     
     steps:
       - name: Checkout code
@@ -147,6 +150,7 @@ jobs:
           python3 << 'PYTHON_SCRIPT'
           import os
           import sys
+          import json
           from pathlib import Path
           
           # Add current dir to path to import core modules
@@ -320,6 +324,11 @@ jobs:
           print(f"Size: {size_mb:.1f} MB")
           print(f"\nReady for publishing to YouTube, TikTok, VK, Instagram")
           
+          # ========== OUTPUT FOR NEXT STEPS ==========
+          with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a') as f:
+              f.write(f"video_path={video_path}\n")
+              f.write(f"video_size={size_mb:.1f}\n")
+          
           PYTHON_SCRIPT
       
       - name: Upload artifacts
@@ -340,42 +349,149 @@ jobs:
           echo "✅ Video generation complete"
           echo "Format: ${{ steps.params.outputs.format }}"
           echo "Date: ${{ steps.params.outputs.date }}"
-          echo ""
-          echo "📥 Download from artifacts"
-          echo "📤 Then publish to social media"
+          echo "Video path: ${{ steps.generate.outputs.video_path }}"
+          echo "Video size: ${{ steps.generate.outputs.video_size }} MB"
 
-  notify-result:
+  send-to-telegram:
     runs-on: ubuntu-22.04
     needs: [generate-video]
     if: always()
     
     steps:
-      - name: Send Telegram notification
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download video artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: horoscope-output-${{ github.run_number }}
+          path: ./artifacts
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Find and send video to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FORMAT: ${{ github.event.inputs.format || 'shorts' }}
+          STATUS: ${{ needs.generate-video.result }}
         run: |
-          TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          TELEGRAM_CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+          python3 << 'PYTHON_SCRIPT'
+          import os
+          import requests
+          import glob
+          from pathlib import Path
           
-          # Only send if both tokens are set
-          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "⚠️ Telegram secrets not configured, skipping notification"
-            exit 0
-          fi
+          telegram_token = os.getenv('TELEGRAM_BOT_TOKEN')
+          chat_id = os.getenv('TELEGRAM_CHAT_ID')
+          fmt = os.getenv('FORMAT')
+          status = os.getenv('STATUS')
           
-          FORMAT="${{ github.event.inputs.format || 'shorts' }}"
-          STATUS="${{ needs.generate-video.result }}"
+          # Validate Telegram credentials
+          if not telegram_token or not chat_id:
+              print("⚠️  Telegram credentials not configured, skipping")
+              print("   Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID secrets")
+              exit(0)
           
-          if [ "$STATUS" = "success" ]; then
-            EMOJI="✅"
-            TEXT="Horoscope video generated successfully"
-          else
-            EMOJI="❌"
-            TEXT="Horoscope video generation failed"
-          fi
+          print("📡 Telegram sender initialized")
+          print(f"   Chat ID: {chat_id}")
+          print(f"   Token: {telegram_token[:10]}...")
           
-          MESSAGE="${EMOJI} ${TEXT}%0AFormat: ${FORMAT}%0AWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Prepare message
+          if status == "success":
+              emoji = "✅"
+              title = "Horoscope Video Generated!"
+          else:
+              emoji = "❌"
+              title = "Video Generation Failed"
           
-          curl -s -X POST \
-            -H 'Content-Type: application/x-www-form-urlencoded' \
-            -d "chat_id=$TELEGRAM_CHAT_ID&text=$MESSAGE&parse_mode=HTML" \
-            "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" > /dev/null || true
+          message = f"{emoji} {title}\n"
+          message += f"Format: {fmt}\n"
+          message += f"Run: #${{ github.run_number }}\n"
+          message += f"Branch: ${{ github.ref_name }}"
+          
+          # Find video files
+          video_patterns = ['artifacts/output/videos/**/*.mp4', 
+                           'artifacts/output/videos/**/*.webm',
+                           'artifacts/output/videos/**/*.mov']
+          
+          video_files = []
+          for pattern in video_patterns:
+              video_files.extend(glob.glob(pattern, recursive=True))
+          
+          if not video_files:
+              print("⚠️  No video files found in artifacts")
+              print("   Looking in: artifacts/output/videos/")
+              
+              # List what we have
+              if os.path.exists('artifacts'):
+                  print("\n📁 Artifacts structure:")
+                  for root, dirs, files in os.walk('artifacts'):
+                      level = root.replace('artifacts', '').count(os.sep)
+                      indent = ' ' * 2 * level
+                      print(f"{indent}{os.path.basename(root)}/")
+                      subindent = ' ' * 2 * (level + 1)
+                      for file in files[:5]:  # Show first 5 files
+                          print(f"{subindent}{file}")
+              
+              # Send message without video
+              url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
+              payload = {
+                  'chat_id': chat_id,
+                  'text': message,
+                  'parse_mode': 'HTML'
+              }
+              
+              response = requests.post(url, json=payload)
+              if response.status_code == 200:
+                  print("✅ Status message sent to Telegram (no video attached)")
+              else:
+                  print(f"❌ Failed to send message: {response.text}")
+              
+              exit(0)
+          
+          # Send each video found
+          for video_file in video_files[:3]:  # Limit to 3 videos
+              file_path = Path(video_file)
+              file_size_mb = file_path.stat().st_size / (1024 * 1024)
+              
+              print(f"\n🎬 Sending: {file_path.name}")
+              print(f"   Size: {file_size_mb:.1f} MB")
+              
+              # For files > 50MB, send as document instead of video
+              if file_size_mb > 50:
+                  print(f"   ⚠️  File > 50MB, sending as document")
+                  method = 'sendDocument'
+                  file_param = 'document'
+              else:
+                  method = 'sendVideo'
+                  file_param = 'video'
+              
+              try:
+                  with open(video_file, 'rb') as f:
+                      files = {file_param: f}
+                      data = {
+                          'chat_id': chat_id,
+                          'caption': message,
+                          'parse_mode': 'HTML'
+                      }
+                      
+                      url = f"https://api.telegram.org/bot{telegram_token}/{method}"
+                      response = requests.post(url, files=files, data=data, timeout=300)
+                      
+                      if response.status_code == 200:
+                          print(f"   ✅ Sent successfully!")
+                      else:
+                          print(f"   ❌ Error: {response.status_code}")
+                          print(f"   {response.text}")
+              
+              except Exception as e:
+                  print(f"   ❌ Failed: {e}")
+          
+          print("\n✅ Telegram delivery complete")
+          
+          PYTHON_SCRIPT
         continue-on-error: true
