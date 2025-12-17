@@ -38,7 +38,7 @@ jobs:
       
       # ✅ Cache pip dependencies (built-in)
       - name: Setup Python 3.11
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'  # ✅ Enables pip caching (~15s → ~2s on cache hit)
