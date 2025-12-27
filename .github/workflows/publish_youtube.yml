@@ -1,0 +1,77 @@
+
+name: 2. Scheduled YouTube Publisher (Prototype)
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # Runs daily at 8 AM UTC
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository (main branch)
+      uses: actions/checkout@v4
+      with:
+        ref: 'main'
+        token: ${{ secrets.GITHUB_TOKEN }} # Use default token for checkout
+
+    - name: 1. Find Next Video to Publish (PROTOTYPE)
+      id: scheduler
+      run: |
+        echo "PROTOTYPE STEP: Reading schedule.json to find the next video."
+        # In a real scenario, this step would parse schedule.json, find the
+        # first video with a publishDate in the past and status 'pending',
+        # and output its project ID and branch name.
+        echo "Video to publish: 'Project XYZ'"
+        echo "Branch: 'project/12345-some-title'"
+        echo "::set-output name=video_id::123"
+        echo "::set-output name=branch_name::project/12345-some-title"
+
+    - name: 2. Download Video Artifact (PROTOTYPE)
+      run: |
+        echo "PROTOTYPE STEP: Downloading 'final-video' artifact for the target branch."
+        # In a real scenario, this would use an action like 'actions/download-artifact'
+        # combined with the GitHub API to find the correct workflow run for the branch
+        # and download its specific artifact.
+        mkdir -p ./video_artifact
+        echo "Mock video content" > ./video_artifact/final_video.mp4
+        echo "Mock metadata" > ./video_artifact/project_metadata.json
+
+    - name: 3. Prepare Metadata for Upload (PROTOTYPE)
+      id: metadata
+      run: |
+        echo "PROTOTYPE STEP: Reading metadata and selecting assets."
+        # This step would parse project_metadata.json and thumbnail files.
+        echo "Selected Title: The Lost City of Atlantis"
+        echo "Selected Description: A deep dive into the legendary city."
+        echo "Selected Thumbnail: /path/to/thumbnail_01.png"
+        echo "::set-output name=title::'The Lost City of Atlantis'"
+        echo "::set-output name=description::'A deep dive into the legendary city.'"
+
+    - name: 4. Upload to YouTube (PROTOTYPE)
+      env:
+        YOUTUBE_CREDENTIALS: ${{ secrets.MYSTIC_NARRATIVES }}
+      run: |
+        echo "PROTOTYPE STEP: Uploading to YouTube."
+        echo "Video File: ./video_artifact/final_video.mp4"
+        echo "Title: ${{ steps.metadata.outputs.title }}"
+        echo "Description: ${{ steps.metadata.outputs.description }}"
+        echo "Privacy: private"
+        echo "Scheduled Time: ..."
+        # A real implementation would use a YouTube upload script/action with secrets for authentication.
+        # The script would use the YOUTUBE_CREDENTIALS environment variable.
+        if [ -z "$YOUTUBE_CREDENTIALS" ]; then
+          echo "::warning:: YouTube credentials secret (MYSTIC_NARRATIVES) is not set in GitHub repository settings."
+        else
+          echo "YouTube credentials secret found."
+        fi
+        sleep 5 # Simulate upload time
+
+    - name: 5. Update Schedule File (PROTOTYPE)
+      run: |
+        echo "PROTOTYPE STEP: Updating schedule.json."
+        # This step would modify schedule.json to mark the video as 'published',
+        # then commit and push the change back to the main branch.
+        echo "Updating status for video ID ${{ steps.scheduler.outputs.video_id }} to 'published'."
