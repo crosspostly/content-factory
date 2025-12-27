@@ -1,0 +1,37 @@
+
+name: 1. Render Video Pipeline
+
+on:
+  push:
+    branches:
+      - 'project/**'
+  workflow_dispatch:
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Set up FFmpeg
+      uses: FedericoCarboni/setup-ffmpeg@v3
+
+    - name: Install Python dependencies
+      run: pip install Pillow piexif
+
+    - name: Run Assembly Script
+      run: python assemble_video.py
+
+    - name: Upload Video Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: final-video-${{ github.run_id }}
+        path: "*.mp4"
+        retention-days: 7
