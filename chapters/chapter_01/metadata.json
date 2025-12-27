@@ -1,0 +1,19 @@
+{
+  "chapterNumber": 1,
+  "title": "Test Chapter",
+  "audioDuration": 1.9999773242630385,
+  "imageDuration": 2,
+  "imageCount": 1,
+  "musicUrl": "https://prod-1.storage.jamendo.com/?trackid=263849&format=mp31&from=E%2FwiM09tFSWPF9Q7FInuZg%3D%3D%7CheAPTjf4xEzouXmSqL1cQA%3D%3D",
+  "musicVolume": 0.1,
+  "sfxTimings": [
+    {
+      "name": "room-tone wind rain 11 200216_0114.wav",
+      "startTime": 3,
+      "duration": 7.40031,
+      "volume": 0.7,
+      "filePath": "sfx/room-tone_wind_rain_11_200216_0114wav.mp3",
+      "url": "https://cdn.freesound.org/previews/522/522752_1648170-hq.mp3"
+    }
+  ]
+}

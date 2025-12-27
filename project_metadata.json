@@ -1,0 +1,104 @@
+{
+  "id": "test-1766851240174",
+  "title": "GitHub Upload Test",
+  "topic": "GitHub Upload Test",
+  "selectedTitle": "Test Project 19:00:40",
+  "chapters": [
+    {
+      "id": "test-chapter-1",
+      "title": "Test Chapter",
+      "script": [
+        {
+          "speaker": "Narrator",
+          "text": "This is a test narration."
+        },
+        {
+          "speaker": "Narrator",
+          "text": "Listen to the sound."
+        },
+        {
+          "speaker": "SFX",
+          "text": "A lonely wind howls in the distance.",
+          "searchKeywords": "wind howling",
+          "soundEffect": {
+            "id": 522752,
+            "name": "room-tone wind rain 11 200216_0114.wav",
+            "tags": [
+              "ambience",
+              "ambient",
+              "apartment",
+              "atmosphere",
+              "atmospheric",
+              "background-sound",
+              "blowing",
+              "bouncing",
+              "breeze",
+              "building",
+              "gale",
+              "general-noise",
+              "gusts",
+              "house",
+              "howling",
+              "indoors",
+              "inside",
+              "polar",
+              "rain",
+              "raining",
+              "room",
+              "room-noise",
+              "room-tone",
+              "storm",
+              "tone",
+              "white-noise",
+              "wind",
+              "window",
+              "windy"
+            ],
+            "license": "https://creativecommons.org/licenses/by/4.0/",
+            "duration": 7.40031,
+            "username": "klankbeeld",
+            "previews": {
+              "preview-hq-mp3": "https://cdn.freesound.org/previews/522/522752_1648170-hq.mp3",
+              "preview-hq-ogg": "https://cdn.freesound.org/previews/522/522752_1648170-hq.ogg",
+              "preview-lq-mp3": "https://cdn.freesound.org/previews/522/522752_1648170-lq.mp3",
+              "preview-lq-ogg": "https://cdn.freesound.org/previews/522/522752_1648170-lq.ogg"
+            }
+          }
+        }
+      ],
+      "status": "completed",
+      "backgroundImages": [
+        {
+          "url": "placeholder.png",
+          "prompt": "test image"
+        }
+      ],
+      "backgroundMusic": {
+        "id": "263849",
+        "name": "A coeur ouvert",
+        "artist_name": "Francesco",
+        "audio": "https://prod-1.storage.jamendo.com/?trackid=263849&format=mp31&from=E%2FwiM09tFSWPF9Q7FInuZg%3D%3D%7CheAPTjf4xEzouXmSqL1cQA%3D%3D"
+      }
+    }
+  ],
+  "youtubeTitleOptions": [],
+  "description": "Test Description",
+  "seoKeywords": [],
+  "visualSearchPrompts": [],
+  "characters": [],
+  "sources": [],
+  "language": "English",
+  "totalDurationMinutes": 1,
+  "narrationMode": "monologue",
+  "creativeFreedom": false,
+  "characterVoices": {},
+  "monologueVoice": "Puck",
+  "initialImageCount": 1,
+  "imageSource": "ai",
+  "selectedBgIndex": 0,
+  "backgroundMusicVolume": 0.2,
+  "thumbnailText": "Test",
+  "publishDate": "2025-12-27T16:00:42.515Z",
+  "format": "short",
+  "branchName": "project/1766851241225-test-project-19-00-40"
+}
