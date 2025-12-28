@@ -12,7 +12,6 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-import requests
 from PIL import Image
 from moviepy.editor import (
     ImageClip,
