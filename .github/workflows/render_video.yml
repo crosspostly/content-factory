@@ -13,41 +13,37 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
 
-    - name: Set up Python
+    - name: Set up Python 3.10
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-        cache: 'pip'
-        cache-dependency-path: 'requirements.txt'
-
-    - name: Clear pip cache completely
-      run: |
-        echo "=== CLEARING PIP CACHE ==="
-        pip cache purge
-        rm -rf ~/.cache/pip
-        echo "✅ Cache cleared"
-        echo ""
-
-    - name: Upgrade pip, setuptools, and wheel
-      run: |
-        echo "=== Upgrading pip and tools ==="
-        python -m pip install --upgrade pip setuptools wheel --no-cache-dir
-        echo "Pip version: $(pip --version)"
-        echo ""
 
     - name: Set up FFmpeg
       uses: FedericoCarboni/setup-ffmpeg@v3
 
-    - name: Verify requirements.txt exists
+    # ===== CRITICAL: GUARANTEE FRESH INSTALL =====
+    - name: "STEP 1: DELETE all pip caches"
       run: |
-        echo "=== Checking requirements.txt ==="
+        echo "❌ Removing ALL pip caches..."
+        pip cache purge || true
+        rm -rf ~/.cache/pip || true
+        rm -rf ~/.pip || true
+        echo "✅ All pip caches deleted"
+
+    - name: "STEP 2: Upgrade pip FIRST"
+      run: |
+        echo "🔄 Upgrading pip from scratch..."
+        python -m pip install --upgrade --no-cache-dir pip setuptools wheel
+        pip --version
+        echo "✅ pip upgraded"
+
+    - name: "STEP 3: Check requirements.txt"
+      run: |
+        echo "🔍 Checking requirements.txt..."
         if [ ! -f requirements.txt ]; then
-          echo "❌ FATAL: requirements.txt NOT FOUND!"
-          echo "Looking in repository:"
-          find . -name "requirements.txt" -type f
+          echo "❌ ERROR: requirements.txt NOT FOUND!"
+          ls -la
           exit 1
         fi
         echo "✅ requirements.txt found"
@@ -56,71 +52,71 @@ jobs:
         cat requirements.txt
         echo ""
 
-    - name: Install Python dependencies (NO CACHE)
+    - name: "STEP 4: Install dependencies with AGGRESSIVE flags"
       run: |
-        echo "=== Installing dependencies with --no-cache-dir ==="
-        pip install -r requirements.txt --no-cache-dir --verbose --force-reinstall
+        echo "💾 Installing from requirements.txt..."
         echo ""
+        # Use absolute maximum force
+        pip install \
+          --no-cache-dir \
+          --force-reinstall \
+          --no-deps \
+          --upgrade \
+          -r requirements.txt
         echo "✅ Dependencies installed"
-        echo ""
 
-    - name: Verify critical imports
+    - name: "STEP 5: Verify EACH dependency with aggressive retry"
       run: |
-        echo "=== CRITICAL: Verifying each import ==="
+        echo "🤬 Verifying dependencies..."
         echo ""
         
-        # PIL/Pillow
-        echo "Checking: PIL (Pillow)"
-        python -c "from PIL import Image; print(f'✅ PIL (Pillow) OK')" || {
-          echo "❌ FATAL: PIL import failed!"
-          exit 1
+        # Pillow
+        python -c "from PIL import Image; print('✅ Pillow OK')" || {
+          echo "🔄 Retrying Pillow..."
+          pip install --no-cache-dir --force-reinstall Pillow
+          python -c "from PIL import Image; print('✅ Pillow OK after retry')"
         }
         
         # moviepy
-        echo "Checking: moviepy"
-        python -c "from moviepy.editor import ImageClip; print('✅ moviepy.editor imports OK')" || {
-          echo "❌ FATAL: moviepy import failed!"
-          exit 1
+        python -c "from moviepy.editor import ImageClip; print('✅ moviepy OK')" || {
+          echo "🔄 Retrying moviepy..."
+          pip install --no-cache-dir --force-reinstall moviepy imageio-ffmpeg
+          python -c "from moviepy.editor import ImageClip; print('✅ moviepy OK after retry')"
         }
         
         # pydub
-        echo "Checking: pydub"
         python -c "import pydub; print('✅ pydub OK')" || {
-          echo "❌ FATAL: pydub import failed!"
-          exit 1
+          echo "🔄 Retrying pydub..."
+          pip install --no-cache-dir --force-reinstall pydub
+          python -c "import pydub; print('✅ pydub OK after retry')"
         }
         
-        # google-generativeai
-        echo "Checking: google.generativeai"
+        # google.generativeai
         python -c "import google.generativeai; print('✅ google.generativeai OK')" || {
-          echo "❌ FATAL: google.generativeai import failed!"
-          exit 1
+          echo "🔄 Retrying google.generativeai..."
+          pip install --no-cache-dir --force-reinstall google-generativeai
+          python -c "import google.generativeai; print('✅ google.generativeai OK after retry')"
         }
         
         echo ""
-        echo "✅ ALL CRITICAL DEPENDENCIES VERIFIED!"
-        echo ""
+        echo "✅ ALL dependencies verified"
 
-    - name: List all installed packages
+    - name: "STEP 6: Show what's installed"
       run: |
-        echo "=== Installed packages ==="
-        pip list
-        echo ""
+        echo "📊 Installed packages:"
+        pip list | grep -E "(Pillow|moviepy|pydub|google|requests|imageio)"
 
-    - name: Verify assemble_video.py syntax
+    - name: "STEP 7: Python syntax check"
       run: |
-        echo "=== Checking assemble_video.py syntax ==="
+        echo "🔍 Checking assemble_video.py syntax..."
         python -m py_compile assemble_video.py
         echo "✅ Syntax OK"
-        echo ""
 
-    - name: Run Assembly Script
+    - name: "STEP 8: RUN THE SCRIPT"
       run: |
-        echo "=== Starting video assembly ==="
-        echo ""
+        echo "🚀 ========== STARTING VIDEO ASSEMBLY =========="
         python assemble_video.py
-        echo ""
-        echo "✅ Assembly completed"
+        echo "✅ ========== VIDEO ASSEMBLY COMPLETE =========="
 
     - name: Upload Video Artifact
       if: success()
@@ -130,70 +126,32 @@ jobs:
         path: "*.mp4"
         retention-days: 7
 
-    - name: Comprehensive Debugging on failure
+    - name: "DEBUG: Show workspace on failure"
       if: failure()
       run: |
+        echo "❌ WORKFLOW FAILED - DEBUG INFO:"
         echo ""
-        echo "╔══════════════════════════════════════════════════════════════╗"
-        echo "║              COMPREHENSIVE DEBUG REPORT                       ║"
-        echo "╚══════════════════════════════════════════════════════════════╝"
-        echo ""
-        
-        echo "=== System Information ==="
-        uname -a
-        echo ""
-        
-        echo "=== Python Information ==="
+        echo "=== Python Info ==="
         python --version
         which python
         echo ""
-        
-        echo "=== Pip Information ==="
+        echo "=== Pip Info ==="
         pip --version
         which pip
         echo ""
-        
-        echo "=== Python Path ==="
-        python -c "import sys; print('\n'.join(sys.path))"
-        echo ""
-        
-        echo "=== All Installed Packages ==="
+        echo "=== All installed ==="
         pip list
         echo ""
-        
-        echo "=== Requirements.txt Content ==="
-        if [ -f requirements.txt ]; then
-          cat requirements.txt
-        else
-          echo "❌ requirements.txt NOT FOUND!"
-        fi
-        echo ""
-        
-        echo "=== Testing each import individually ==="
-        echo ""
-        
-        python -c "from PIL import Image; print('✅ PIL import: OK')" 2>&1 || echo "❌ PIL import: FAILED"
-        python -c "from moviepy.editor import ImageClip; print('✅ moviepy import: OK')" 2>&1 || echo "❌ moviepy import: FAILED"
-        python -c "import pydub; print('✅ pydub import: OK')" 2>&1 || echo "❌ pydub import: FAILED"
-        python -c "import google.generativeai; print('✅ google.generativeai import: OK')" 2>&1 || echo "❌ google.generativeai import: FAILED"
-        
-        echo ""
-        echo "=== File Structure ==="
+        echo "=== Workspace ==="
         ls -la
         echo ""
-        
-        if [ -f assemble_video.py ]; then
-          echo "=== First 25 lines of assemble_video.py ==="
-          head -25 assemble_video.py
-        else
-          echo "❌ assemble_video.py NOT FOUND!"
-        fi
+        echo "=== assemble_video.py first 30 lines ==="
+        head -30 assemble_video.py
         echo ""
-        
-        echo "=== Python Compilation Test ==="
-        python -m py_compile assemble_video.py 2>&1 || echo "❌ Compilation failed"
+        echo "=== Try imports ==="
+        python -c "from PIL import Image; print('✅ PIL OK')" 2>&1 || echo "❌ PIL FAILED"
+        python -c "from moviepy.editor import ImageClip; print('✅ moviepy OK')" 2>&1 || echo "❌ moviepy FAILED"
+        python -c "import pydub; print('✅ pydub OK')" 2>&1 || echo "❌ pydub FAILED"
+        python -c "import google.generativeai; print('✅ google OK')" 2>&1 || echo "❌ google FAILED"
         echo ""
-        
-        echo "╔══════════════════════════════════════════════════════════════╗"
-        echo "║                    END OF DEBUG REPORT                        ║"
-        echo "╚══════════════════════════════════════════════════════════════╝"
+        exit 1
