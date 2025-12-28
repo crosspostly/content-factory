@@ -22,151 +22,101 @@ jobs:
     - name: Set up FFmpeg
       uses: FedericoCarboni/setup-ffmpeg@v3
 
-    # ===== DELETE CACHES =====
-    - name: "[1] Delete all pip caches"
+    # ===== INSTALL DEPS =====
+    - name: "[1] Delete pip caches"
       run: |
-        echo "❌ Removing ALL pip caches..."
         pip cache purge || true
         rm -rf ~/.cache/pip || true
-        rm -rf ~/.pip || true
-        echo "✅ All pip caches deleted"
 
-    - name: "[2] Upgrade pip FIRST"
+    - name: "[2] Upgrade pip"
       run: |
-        echo "🔄 Upgrading pip..."
         python -m pip install --upgrade --no-cache-dir pip setuptools wheel
         pip --version
 
-    - name: "[3] Check requirements.txt"
+    - name: "[3] Install dependencies"
       run: |
-        if [ ! -f requirements.txt ]; then
-          echo "❌ ERROR: requirements.txt NOT FOUND!"
+        pip install --no-cache-dir --force-reinstall --no-deps --upgrade -r requirements.txt
+
+    - name: "[4] Verify dependencies"
+      run: |
+        python -c "from PIL import Image; print('✅ Pillow')"
+        python -c "from moviepy.editor import ImageClip; print('✅ moviepy')"
+        python -c "import pydub; print('✅ pydub')"
+
+    # ===== VERIFY EXISTING DATA =====
+    - name: "[5] Verify existing chapter data"
+      run: |
+        echo "🔍 Checking for existing chapter data..."
+        echo ""
+        
+        # Check chapter directory exists
+        if [ ! -d "chapters/chapter_01" ]; then
+          echo "❌ ERROR: chapters/chapter_01 directory not found!"
           exit 1
         fi
-        echo "✅ requirements.txt found"
-
-    - name: "[4] Install dependencies with aggressive flags"
-      run: |
-        pip install \
-          --no-cache-dir \
-          --force-reinstall \
-          --no-deps \
-          --upgrade \
-          -r requirements.txt
-
-    - name: "[5] Verify dependencies with retry logic"
-      run: |
-        echo "🔍 Verifying dependencies..."
+        echo "✅ chapters/chapter_01/ exists"
         
-        for package in "Pillow:PIL" "moviepy:moviepy" "pydub:pydub" "google.generativeai:google.generativeai"; do
-          pkg_name=$(echo $package | cut -d: -f1)
-          import_name=$(echo $package | cut -d: -f2)
-          
-          if python -c "import $import_name" 2>/dev/null; then
-            echo "✅ $pkg_name OK"
-          else
-            echo "🔄 Retrying $pkg_name..."
-            pip install --no-cache-dir --force-reinstall "$pkg_name" || exit 1
-            python -c "import $import_name" || exit 1
-            echo "✅ $pkg_name OK after retry"
-          fi
-        done
-
-    - name: "[6] CRITICAL: Check test data structure"
-      run: |
-        echo "🔍 Checking directory structure..."
-        echo ""
-        echo "=== Current directory ==="
-        pwd
-        echo ""
-        echo "=== Files in repo ==="
-        ls -la
-        echo ""
-        echo "=== Check for test data ==="
-        if [ -d "test_data" ]; then
-          echo "✅ Found test_data/"
-          find test_data -type f | head -20
-        elif [ -d "chapters" ]; then
-          echo "✅ Found chapters/"
-          find chapters -type f | head -20
+        # Check for audio
+        if [ -f "chapters/chapter_01/audio.wav" ]; then
+          AUDIO_SIZE=$(du -h chapters/chapter_01/audio.wav | cut -f1)
+          echo "✅ audio.wav found ($AUDIO_SIZE)"
+        elif [ -f "chapters/chapter_01/audio.mp3" ]; then
+          AUDIO_SIZE=$(du -h chapters/chapter_01/audio.mp3 | cut -f1)
+          echo "✅ audio.mp3 found ($AUDIO_SIZE)"
         else
-          echo "❌ WARNING: No test_data or chapters directory!"
+          echo "❌ ERROR: No audio file found!"
+          exit 1
+        fi
+        
+        # Check for images
+        IMAGE_COUNT=$(find chapters/chapter_01/images -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' \) 2>/dev/null | wc -l)
+        if [ "$IMAGE_COUNT" -eq 0 ]; then
+          echo "❌ ERROR: No images in chapters/chapter_01/images/"
+          exit 1
+        fi
+        echo "✅ Found $IMAGE_COUNT images"
+        
+        # Check for subtitles
+        if [ -f "chapters/chapter_01/subtitles.srt" ]; then
+          SUB_SIZE=$(wc -l < chapters/chapter_01/subtitles.srt)
+          echo "✅ subtitles.srt found ($SUB_SIZE lines)"
+        else
+          echo "⚠️  subtitles.srt not found (will be created)"
         fi
         echo ""
 
-    - name: "[7] CRITICAL: Create minimal test structure if missing"
+    - name: "[6] Show chapter structure"
       run: |
-        echo "🏗️  Creating test structure..."
-        
-        # Create the required directory structure
-        mkdir -p chapters/chapter_01/images
-        
-        # Create a blank image if none exist
-        if [ ! "$(ls -A chapters/chapter_01/images/)" ]; then
-          echo "Creating test image..."
-          python3 << 'EOF'
-import os
-from PIL import Image, ImageDraw
-
-# Create 1080x1920 portrait image (or 1920x1080 for landscape)
-img = Image.new('RGB', (1080, 1920), color='black')
-draw = ImageDraw.Draw(img)
-
-# Add text
-text = "Test Video"
-draw.text((100, 100), text, fill='white')
-
-img.save('chapters/chapter_01/images/test_01.jpg')
-print("✅ Test image created")
-EOF
-        fi
-        
-        # Create test audio if none exists
-        if [ ! -f "chapters/chapter_01/audio.mp3" ]; then
-          echo "Creating test audio..."
-          # 5 second silent MP3
-          ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 5 -q:a 9 -acodec libmp3lame chapters/chapter_01/audio.mp3 2>/dev/null
-          echo "✅ Test audio created"
-        fi
-        
-        # Create test subtitles if none exist
-        if [ ! -f "chapters/chapter_01/subtitles.srt" ]; then
-          echo "Creating test subtitles..."
-          cat > chapters/chapter_01/subtitles.srt << 'SUBS'
-1
-00:00:00,000 --> 00:00:05,000
-Test Subtitle
-SUBS
-          echo "✅ Test subtitles created"
-        fi
-        
+        echo "📂 Chapter structure:"
+        ls -lh chapters/chapter_01/
         echo ""
-        echo "=== Final structure ==="
-        find chapters -type f
-        echo ""
+        echo "📸 Images:"
+        ls -lh chapters/chapter_01/images/ | head -10
 
-    - name: "[8] Python syntax check"
+    - name: "[7] Syntax check assemble_video.py"
       run: |
-        echo "🐍 Checking assemble_video.py syntax..."
         python -m py_compile assemble_video.py
-        echo "✅ Syntax OK"
+        echo "✅ Syntax valid"
 
-    - name: "[9] RUN THE SCRIPT"
+    - name: "[8] RUN VIDEO ASSEMBLY"
       run: |
         echo "🚀 ========== STARTING VIDEO ASSEMBLY =========="
         python assemble_video.py
-        echo "✅ ========== VIDEO ASSEMBLY COMPLETE =========="
+        echo "✅ ========== ASSEMBLY COMPLETE =========="
 
-    - name: "[10] Verify output video"
+    - name: "[9] Verify MP4 output"
       run: |
-        echo "🔍 Checking output..."
+        echo "🔍 Checking for MP4 output..."
         if ls *.mp4 1> /dev/null 2>&1; then
-          echo "✅ MP4 files found:"
+          echo "✅ MP4 files created:"
           ls -lh *.mp4
-        else
-          echo "❌ ERROR: No MP4 output file created!"
           echo ""
-          echo "Checking what's in the directory:"
+          echo "📊 Video info:"
+          ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -of csv=p=0 *.mp4
+        else
+          echo "❌ ERROR: No MP4 output created!"
+          echo ""
+          echo "Checking directory contents:"
           ls -la
           exit 1
         fi
@@ -179,31 +129,24 @@ SUBS
         path: "*.mp4"
         retention-days: 7
 
-    - name: "DEBUG: Full diagnostics on failure"
+    - name: "🔧 DEBUG: Failure diagnostics"
       if: failure()
       run: |
-        echo "❌ WORKFLOW FAILED - DEBUG INFO:"
+        echo "❌ WORKFLOW FAILED"
         echo ""
-        echo "=== Python ==="
-        python --version && which python
+        echo "=== Python Environment ==="
+        python --version
         echo ""
-        echo "=== Pip ==="
-        pip --version && which pip
-        pip list | grep -E "(Pillow|moviepy|pydub|google)"
+        echo "=== Installed Packages ==="
+        pip list | grep -E "Pillow|moviepy|pydub" || echo "Packages not found"
         echo ""
         echo "=== FFmpeg ==="
         ffmpeg -version | head -3
         echo ""
-        echo "=== Directory ==="
+        echo "=== Repository Structure ==="
         ls -la
         echo ""
-        echo "=== assemble_video.py first 30 lines ==="
-        head -30 assemble_video.py
-        echo ""
-        echo "=== Try imports ==="
-        python -c "from PIL import Image; print('✅ PIL OK')" 2>&1 || echo "❌ PIL FAILED"
-        python -c "from moviepy.editor import ImageClip; print('✅ moviepy OK')" 2>&1 || echo "❌ moviepy FAILED"
-        python -c "import pydub; print('✅ pydub OK')" 2>&1 || echo "❌ pydub FAILED"
-        python -c "import google.generativeai; print('✅ google OK')" 2>&1 || echo "❌ google FAILED"
+        echo "=== assemble_video.py (first 40 lines) ==="
+        head -40 assemble_video.py
         echo ""
         exit 1
