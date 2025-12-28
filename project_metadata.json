@@ -1,0 +1,139 @@
+{
+  "id": "a8720c4f-6840-4e19-ac0a-364ad5c0ee32",
+  "channelId": "historical-tier1",
+  "youtubeTitleOptions": [
+    "Virginia Dare's LAST WORDS? The Stone That Broke 400 Years of Silence.",
+    "Roanoke: Did THIS Chilling Relic Reveal Their Horrifying End?",
+    "The Dare Stone: A Mother's Desperate Message... Or a Devious Hoax?",
+    "400 Years of Mystery: What If Virginia Dare's Mother Left a Note?"
+  ],
+  "description": "Deep in the ancient, whispering marshes of North Carolina, a 400-year-old silence has haunted history. The Lost Colony of Roanoke vanished without a trace, leaving only one cryptic word. ⏳ But what if a desperate mother, Virginia Dare's own, carved a chilling account into stone, detailing massacre, flight, and a horrifying end? Was it her last, terrifying message, or the most elaborate hoax in colonial history? 😱 This single relic could rewrite history, or deepen its most unsettling mystery. Dive deeper into \"The Dare Stones: Eleanor's Desperate Message or a Clever Hoax?\" and uncover the truth. #Roanoke #LostColony #VirginiaDare #Mystery #Unexplained",
+  "seoKeywords": [
+    "Roanoke",
+    "Lost Colony",
+    "Virginia Dare",
+    "Dare Stone",
+    "Roanoke mystery",
+    "unexplained history",
+    "colonial America",
+    "historical mystery",
+    "North Carolina legends",
+    "ancient artifacts",
+    "unsolved mysteries",
+    "Croatoan",
+    "Eleanor Dare"
+  ],
+  "visualSearchPrompts": [
+    "Eerie drone shot over fog-shrouded Roanoke Island marshes, desolate coast.",
+    "Close-up: ancient, weathered stone with crude, mysterious carvings, hand tracing details.",
+    "Dramatic, shadowy reenactment: distressed colonial woman carving into rock under moonlight.",
+    "Overhead shot: dense, primeval forest, untouched, implying hidden secrets.",
+    "Map of Roanoke Island, with a glowing 'X' or ominous red marking over the colony site.",
+    "Text overlay: 'CROATOAN' slowly morphing into 'DARE STONE' with a subtle glitch effect.",
+    "Quick cuts of implied danger: flickering firelight, distant shadows in a forest."
+  ],
+  "characters": [
+    {
+      "name": "Host",
+      "description": "A deep, calm, and slightly melancholic voice. Serves as the primary narrator, guiding the audience through the mystery with a sense of wonder and intellectual dread. Asks rhetorical questions.",
+      "suggestedVoiceId": "Algenib"
+    },
+    {
+      "name": "Expert",
+      "description": "A grounded, academic voice, providing historical context and acknowledging the scientific debate without bias. Represents respectful skepticism.",
+      "suggestedVoiceId": "Kore"
+    }
+  ],
+  "chapters": [
+    {
+      "title": "The Roanoke Stone Emerges",
+      "script": [
+        {
+          "speaker": "HOST",
+          "text": "The lost colony of Roanoke. America's first unsolved mystery. Then, in 1937, a carved stone surfaced, claiming to be Virginia Dare's last words. Could this be true?"
+        },
+        {
+          "speaker": "EXPERT",
+          "text": "Wait, are you saying this single artifact could unravel centuries of speculation about Roanoke?"
+        },
+        {
+          "speaker": "HOST",
+          "text": "The records show this stone, and subsequent discoveries, certainly presented a compelling, if controversial, narrative."
+        }
+      ],
+      "visualSearchPrompts": [
+        "Virginia Dare stone 1937 discovery",
+        "Roanoke Lost Colony map",
+        "Ancient carved stone artifact close-up"
+      ],
+      "musicSearchKeywords": "mysterious historical documentary score, noir suspense investigation music, ancient enigma soundtrack",
+      "sfxTimings": [],
+      "backgroundMusic": {
+        "id": "1162103",
+        "name": "A Thousand Years",
+        "artist_name": "Esther Garcia",
+        "audio": "https://prod-1.storage.jamendo.com/?trackid=1162103&format=mp31&from=LWU3u5j9Ns8gMOhTaUSSrw%3D%3D%7Cr6T%2FcZbODnZCGXNsTiZbeA%3D%3D"
+      },
+      "status": "completed",
+      "backgroundImages": []
+    }
+  ],
+  "topic": "[SHORTS] Virginia Dare's Last Words?",
+  "selectedTitle": "Virginia Dare's LAST WORDS? The Stone That Broke 400 Years of Silence.",
+  "thumbnailText": "Virginia Dare's LAST WORDS? The Stone That Broke 400 Years of Silence.",
+  "language": "English",
+  "generatedImages": [],
+  "youtubeThumbnails": [],
+  "designConcepts": [
+    {
+      "name": "Cinematic Title",
+      "hookText": "HER LAST WORDS",
+      "fontFamily": "Cinzel",
+      "textColor": "#F0EAD6",
+      "textBackgroundColor": "rgba(0,0,0,0)",
+      "strokeColor": "#000000",
+      "strokeWidth": 12,
+      "layout": "center-text",
+      "gradientColors": [
+        "#FFFFDD",
+        "#F0EAD6"
+      ]
+    },
+    {
+      "name": "Classified Document",
+      "hookText": "THE DISCOVERY",
+      "fontFamily": "Special Elite",
+      "textColor": "#333333",
+      "textBackgroundColor": "rgba(240, 230, 210, 0.9)",
+      "strokeColor": "#000000",
+      "strokeWidth": 2,
+      "layout": "center-text"
+    },
+    {
+      "name": "Modern Minimalist",
+      "hookText": "LOST HISTORY",
+      "fontFamily": "Bebas Neue",
+      "textColor": "#FFFF00",
+      "textBackgroundColor": "rgba(0,0,0,0)",
+      "strokeColor": "#000000",
+      "strokeWidth": 18,
+      "layout": "center-text"
+    }
+  ],
+  "knowledgeBaseText": "CONTEXT & INSTRUCTIONS FOR SCRIPTWRITER:\n----------------------------------------\nFORMAT: SHORT\nTOPIC: Roanoke Solved? New Evidence Breaks 400-Year Silence\n\nBRIEF & HOOKS:\nHOOK (10s Audio): A stone found in 1937 claims to reveal the horrifying end of Virginia Dare.\n\nCAPTION CONTENT (Deep Dive): The Dare Stone, discovered 350 years after Virginia Dare's birth, purports to be from her mother, Eleanor White Dare. It describes a massacre by 'savages' and the deaths of Virginia and her father, with survivors fleeing inland. While many Dare Stones were fakes, the first one's authenticity is still debated. It’s a chilling, violent account, a stark contrast to other theories, and adds a deeply unsettling layer to Roanoke's disappearance.\n\nGOAL: Drive traffic to \"The Dare Stones: Eleanor's Desperate Message or a Clever Hoax?\"\n\nGOAL:\nDrive traffic to main video\n----------------------------------------\nPlease follow these instructions strictly for the script structure.",
+  "creativeFreedom": true,
+  "totalDurationMinutes": 1,
+  "narrationMode": "dialogue",
+  "characterVoices": {
+    "Host": "Algenib",
+    "Expert": "Kore"
+  },
+  "monologueVoice": "Puck",
+  "selectedBgIndex": 0,
+  "backgroundMusicVolume": 0.12,
+  "initialImageCount": 2,
+  "imageSource": "ai",
+  "publishDate": "2025-12-28T07:53:36.538Z",
+  "format": "short",
+  "branchName": "project/1766908415800-virginia-dare-s-last-words--the-stone-th"
+}
