@@ -23,10 +23,9 @@ jobs:
       issues: write
 
     env:
-      # Prefer the repo's standard secret name, but support legacy naming too
-      GEMINI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || secrets.GEMINI_API_KEY || '' }}
-      GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY || secrets.GEMINI_API_KEY || 'test-key-for-ci' }}
-      PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY || 'test-key-for-ci' }}
+      # Use GOOGLE_AI_API_KEY directly (correct naming)
+      GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+      PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
 
     steps:
       - name: Checkout Code
@@ -34,7 +33,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-          # Work on the same branch that failed the tests
           ref: ${{ github.event.workflow_run.head_branch }}
 
       - name: Setup Python 3.11
@@ -56,11 +54,6 @@ jobs:
         continue-on-error: true
 
       - name: Auto-Fix Loop (Up to 10 Attempts)
-        if: env.GEMINI_API_KEY != ''
-        env:
-          GEMINI_API_KEY: ${{ env.GEMINI_API_KEY }}
-          GOOGLE_AI_API_KEY: ${{ env.GOOGLE_AI_API_KEY }}
-          PIXABAY_API_KEY: ${{ env.PIXABAY_API_KEY }}
         continue-on-error: true
         run: |
           python3 << 'SCRIPT_EOF'
@@ -68,16 +61,26 @@ jobs:
           import os
           import re
           import subprocess
+          import sys
           from pathlib import Path
 
           import google.generativeai as genai
 
-          api_key = os.getenv('GEMINI_API_KEY')
+          # Validate and get API key
+          api_key = os.getenv('GOOGLE_AI_API_KEY', '').strip()
+          
+          if not api_key:
+              print("❌ ERROR: GOOGLE_AI_API_KEY is not configured!")
+              print("Please add GOOGLE_AI_API_KEY to Settings → Secrets and variables → Actions")
+              with open('FIX_SUCCESS', 'w', encoding='utf-8') as f:
+                  f.write('false')
+              sys.exit(0)
+          
+          print("✅ API Key is configured")
           genai.configure(api_key=api_key)
 
-          # Use currently supported Gemini models (December 2025).
-          # Gemini 2.5 series is the latest stable version.
-          ALLOWED_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']
+          # Use currently supported Gemini models (December 2025)
+          ALLOWED_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
           CURRENT_MODEL = 'gemini-2.5-flash'
 
           MAX_ATTEMPTS = 10
@@ -89,13 +92,13 @@ jobs:
               print(f"Model: {CURRENT_MODEL}")
               print(f"{'='*60}\n")
 
-              # Шаг 1: Извлечение ошибок
+              # Step 1: Extract errors
               print("🔍 Extracting error information...")
               error_info = []
               failed_tests = []
               error_messages = []
 
-              # Из артефактов
+              # From artifacts
               for log_file in Path('workflow-artifacts').rglob('*.log'):
                   try:
                       with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
@@ -117,7 +120,7 @@ jobs:
                   except Exception:
                       pass
 
-              # Из последнего запуска
+              # From last run
               if Path('pytest-last.log').exists():
                   with open('pytest-last.log', 'r', encoding='utf-8', errors='ignore') as f:
                       content = f.read()
@@ -136,7 +139,7 @@ jobs:
               print(f"❌ Found {len(set(failed_tests))} failed tests")
               print(f"❌ Found {len(set(error_messages))} error messages")
 
-              # Шаг 2: сборка контекст кода
+              # Step 2: Collect code context
               code_files = []
               for py_file in Path('core').rglob('*.py'):
                   if '__pycache__' not in str(py_file):
@@ -146,7 +149,7 @@ jobs:
                       except Exception:
                           pass
 
-              # Шаг 3: Запрос к Gemini
+              # Step 3: Call Gemini for analysis
               print(f"🤖 Calling Gemini for analysis ({CURRENT_MODEL})...")
 
               prompt = f"""You are debugging Python test failures. Attempt {attempt}/{MAX_ATTEMPTS}.
@@ -197,7 +200,7 @@ jobs:
 
                   print("✅ Analysis complete\n")
 
-                  # Шаг 4: Применение фиксов
+                  # Step 4: Apply fixes
                   print("🔧 Applying fixes...")
 
                   fix_pattern = (
@@ -234,7 +237,7 @@ jobs:
                   print(f"❌ Gemini error: {e}")
                   continue
 
-              # Шаг 5: Запуск тестов
+              # Step 5: Run tests
               print("🧪 Running tests...")
               try:
                   result = subprocess.run(
@@ -260,7 +263,7 @@ jobs:
               except Exception as e:
                   print(f"❌ Test run error: {e}")
 
-          # Результат
+          # Result
           print(f"\n{'='*60}")
           if SUCCESS:
               print("🎉 AUTO-FIX SUCCESSFUL!")
@@ -309,7 +312,6 @@ jobs:
               execSync('git commit -m "🤖 Auto-fix: resolve failing tests\n\nApplied fixes after iterative analysis and testing."');
               execSync(`git push origin ${branchName}`);
 
-              // Читаем все анализы
               let allAnalysis = '';
               for (let i = 1; i <= 10; i++) {
                 const file = `gemini_analysis_attempt_${i}.md`;
@@ -329,7 +331,6 @@ jobs:
 
               console.log(`✅ PR Created: #${pr.data.number}`);
 
-              // Best-effort labels (may not exist in all repos)
               try {
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
@@ -379,7 +380,6 @@ jobs:
 
               console.log(`📝 Issue created: #${issue.data.number}`);
 
-              // Best-effort labels/assignment (labels may not exist; assignee may be invalid)
               try {
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
