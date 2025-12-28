@@ -1,4 +1,3 @@
-
 name: 1. Render Video Pipeline
 
 on:
@@ -24,7 +23,7 @@ jobs:
       uses: FedericoCarboni/setup-ffmpeg@v3
 
     - name: Install Python dependencies
-      run: pip install Pillow piexif
+      run: pip install -r requirements.txt
 
     - name: Run Assembly Script
       run: python assemble_video.py
