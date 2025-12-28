@@ -19,18 +19,74 @@ jobs:
       with:
         python-version: '3.10'
 
+    - name: Upgrade pip and setuptools
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip --version
+
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
     - name: Set up FFmpeg
       uses: FedericoCarboni/setup-ffmpeg@v3
 
     - name: Install Python dependencies
-      run: pip install -r requirements.txt
+      run: |
+        echo "Installing dependencies from requirements.txt..."
+        pip install -r requirements.txt
+        echo ""
+        echo "Verifying critical imports..."
+        python -c "import requests; print(f'✅ requests {requests.__version__}')"
+        python -c "import PIL; print('✅ PIL (Pillow) installed')"
+        python -c "import moviepy; print('✅ moviepy installed')"
+        python -c "import pydub; print('✅ pydub installed')"
 
     - name: Run Assembly Script
-      run: python assemble_video.py
+      run: |
+        echo "Starting video assembly..."
+        python assemble_video.py
 
     - name: Upload Video Artifact
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: final-video-${{ github.run_id }}
         path: "*.mp4"
         retention-days: 7
+
+    - name: Debugging on failure
+      if: failure()
+      run: |
+        echo ""
+        echo "=== DEBUG INFO ==="
+        echo ""
+        echo "Python version:"
+        python --version
+        echo ""
+        echo "Pip version:"
+        pip --version
+        echo ""
+        echo "Installed packages:"
+        pip list
+        echo ""
+        echo "=== Trying to import modules ==="
+        echo ""
+        python -c "import requests" && echo "✅ requests OK" || echo "❌ requests FAILED"
+        python -c "import PIL" && echo "✅ PIL OK" || echo "❌ PIL FAILED"
+        python -c "import moviepy" && echo "✅ moviepy OK" || echo "❌ moviepy FAILED"
+        python -c "import pydub" && echo "✅ pydub OK" || echo "❌ pydub FAILED"
+        echo ""
+        echo "=== Checking files ==="
+        echo ""
+        if [ -f requirements.txt ]; then
+          echo "✅ requirements.txt found"
+          echo "Content:"
+          cat requirements.txt
+        else
+          echo "❌ requirements.txt NOT FOUND!"
+        fi
