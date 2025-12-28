@@ -39,11 +39,23 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
 
-      - name: Install Dependencies
+      - name: Clear pip cache completely
         run: |
-          python -m pip install --upgrade pip
-          pip install -q google-generativeai -r requirements.txt
+          echo "=== CLEARING PIP CACHE ==="
+          pip cache purge
+          rm -rf ~/.cache/pip
+          echo "✅ Cache cleared"
+          echo ""
+
+      - name: Install Dependencies (NO CACHE)
+        run: |
+          python -m pip install --upgrade pip --no-cache-dir
+          pip install -q google-generativeai -r requirements.txt --no-cache-dir --force-reinstall
+          echo "✅ Dependencies installed"
+          echo ""
 
       - name: Download Test Logs
         uses: actions/download-artifact@v4
