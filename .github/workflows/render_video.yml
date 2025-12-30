@@ -22,53 +22,43 @@ jobs:
     - name: Set up FFmpeg
       uses: FedericoCarboni/setup-ffmpeg@v3
 
-    # ===== INSTALL DEPS =====
-    - name: "[1] Delete pip caches"
+    - name: Delete pip caches
       run: |
         pip cache purge || true
         rm -rf ~/.cache/pip || true
 
-    - name: "[2] Upgrade pip"
+    - name: Upgrade pip
       run: |
         python -m pip install --upgrade --no-cache-dir pip setuptools wheel
         pip --version
 
-    - name: "[3] Install dependencies"
+    - name: Install dependencies
       run: |
         pip install --no-cache-dir --force-reinstall --no-deps --upgrade -r requirements.txt
 
-    - name: "[4] Verify dependencies"
+    - name: Verify dependencies
       run: |
         python -c "from PIL import Image; print('✅ Pillow')"
         python -c "from moviepy.editor import ImageClip; print('✅ moviepy')"
         python -c "import pydub; print('✅ pydub')"
 
-    # ===== VERIFY EXISTING DATA =====
-    - name: "[5] Verify existing chapter data"
+    - name: Verify existing chapter data
       run: |
         echo "🔍 Checking for existing chapter data..."
         echo ""
         
-        # Check chapter directory exists
         if [ ! -d "chapters/chapter_01" ]; then
           echo "❌ ERROR: chapters/chapter_01 directory not found!"
           exit 1
         fi
         echo "✅ chapters/chapter_01/ exists"
         
-        # Check for audio
-        if [ -f "chapters/chapter_01/audio.wav" ]; then
-          AUDIO_SIZE=$(du -h chapters/chapter_01/audio.wav | cut -f1)
-          echo "✅ audio.wav found ($AUDIO_SIZE)"
-        elif [ -f "chapters/chapter_01/audio.mp3" ]; then
-          AUDIO_SIZE=$(du -h chapters/chapter_01/audio.mp3 | cut -f1)
-          echo "✅ audio.mp3 found ($AUDIO_SIZE)"
-        else
+        if [ ! -f "chapters/chapter_01/audio.wav" ] && [ ! -f "chapters/chapter_01/audio.mp3" ]; then
           echo "❌ ERROR: No audio file found!"
           exit 1
         fi
+        echo "✅ Audio file found"
         
-        # Check for images
         IMAGE_COUNT=$(find chapters/chapter_01/images -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' \) 2>/dev/null | wc -l)
         if [ "$IMAGE_COUNT" -eq 0 ]; then
           echo "❌ ERROR: No images in chapters/chapter_01/images/"
@@ -76,35 +66,33 @@ jobs:
         fi
         echo "✅ Found $IMAGE_COUNT images"
         
-        # Check for subtitles
         if [ -f "chapters/chapter_01/subtitles.srt" ]; then
-          SUB_SIZE=$(wc -l < chapters/chapter_01/subtitles.srt)
-          echo "✅ subtitles.srt found ($SUB_SIZE lines)"
+          echo "✅ subtitles.srt found"
         else
-          echo "⚠️  subtitles.srt not found (will be created)"
+          echo "⚠️  subtitles.srt not found (optional)"
         fi
         echo ""
 
-    - name: "[6] Show chapter structure"
+    - name: Show chapter structure
       run: |
         echo "📂 Chapter structure:"
         ls -lh chapters/chapter_01/
         echo ""
-        echo "📸 Images:"
+        echo "📷 Images:"
         ls -lh chapters/chapter_01/images/ | head -10
 
-    - name: "[7] Syntax check assemble_video.py"
+    - name: Syntax check assemble_video.py
       run: |
         python -m py_compile assemble_video.py
         echo "✅ Syntax valid"
 
-    - name: "[8] RUN VIDEO ASSEMBLY"
+    - name: RUN VIDEO ASSEMBLY
       run: |
         echo "🚀 ========== STARTING VIDEO ASSEMBLY =========="
         python assemble_video.py
         echo "✅ ========== ASSEMBLY COMPLETE =========="
 
-    - name: "[9] Verify MP4 output"
+    - name: Verify MP4 output
       run: |
         echo "🔍 Checking for MP4 output..."
         if ls *.mp4 1> /dev/null 2>&1; then
@@ -112,11 +100,11 @@ jobs:
           ls -lh *.mp4
           echo ""
           echo "📊 Video info:"
-          ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -of csv=p=0 *.mp4
+          ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -of csv=p=0 *.mp4 || true
         else
           echo "❌ ERROR: No MP4 output created!"
           echo ""
-          echo "Checking directory contents:"
+          echo "Directory contents:"
           ls -la
           exit 1
         fi
@@ -129,24 +117,21 @@ jobs:
         path: "*.mp4"
         retention-days: 7
 
-    - name: "🔧 DEBUG: Failure diagnostics"
+    - name: 🔧 Debug on failure
       if: failure()
       run: |
         echo "❌ WORKFLOW FAILED"
         echo ""
-        echo "=== Python Environment ==="
+        echo "=== Python ==="
         python --version
         echo ""
-        echo "=== Installed Packages ==="
+        echo "=== Packages ==="
         pip list | grep -E "Pillow|moviepy|pydub" || echo "Packages not found"
         echo ""
         echo "=== FFmpeg ==="
         ffmpeg -version | head -3
         echo ""
-        echo "=== Repository Structure ==="
+        echo "=== Directory ==="
         ls -la
-        echo ""
-        echo "=== assemble_video.py (first 40 lines) ==="
-        head -40 assemble_video.py
         echo ""
         exit 1
