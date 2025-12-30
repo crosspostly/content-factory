@@ -1,360 +1,210 @@
-#!/usr/bin/env python3
-"""
-Video Assembly Script - Production Ready
-Assembles video from chapter data (images + audio + subtitles).
-"""
 
 import os
-import sys
 import json
-import logging
-from pathlib import Path
-from typing import Optional, Tuple
+import subprocess
+import sys
+import shutil
+import datetime
+import glob
+import requests
+from urllib.parse import urlparse
 
-from PIL import Image
-from moviepy.editor import (
-    ImageClip,
-    AudioFileClip,
-    concatenate_videoclips,
-    TextClip,
-    CompositeVideoClip,
-)
+# CONFIGURATION
+MUSIC_VOLUME = 0.12  # Consistent with app mix
+SPEECH_FILTER = "equalizer=f=3000:width_type=h:width=2000:g=3,acompressor=threshold=-18dB:ratio=3:attack=200:release=1000"
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('video_assembly.log')
-    ]
-)
-logger = logging.getLogger(__name__)
+# --- ORIENTATION CONFIG ---
+IS_PORTRAIT = True
+TARGET_WIDTH = 1080 if IS_PORTRAIT else 1920
+TARGET_HEIGHT = 1920 if IS_PORTRAIT else 1080
 
+# Subtitle Styling
+SUB_STYLE = "FontName=Arial,FontSize=13,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,MarginV=70,Alignment=2,MarginL=10,MarginR=10,Bold=1" if IS_PORTRAIT else "FontName=Arial,FontSize=24,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,MarginV=35,Alignment=2,Bold=1"
 
-class VideoAssembler:
-    """Assembles production video from chapter components."""
+# ZOOM CONFIG (Ken Burns)
+ZOOM_SPEED = 0.002 if IS_PORTRAIT else 0.001
+MAX_ZOOM = 1.2 if IS_PORTRAIT else 1.1
 
-    def __init__(self, fps: int = 30, output_dir: str = "."):
-        """
-        Initialize VideoAssembler.
-        
-        Args:
-            fps: Frames per second
-            output_dir: Output directory
-        """
-        self.fps = fps
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"✅ Initialized VideoAssembler (fps={fps})")
+# METADATA SCRUBBING FLAGS
+METADATA_FLAGS = [
+    "-map_metadata", "-1",
+    "-metadata", "creation_time=now",
+    "-metadata", "major_brand=mp42",
+    "-metadata", "handler_name=Core Media Data Handler",
+    "-metadata", "encoder=Adobe Premiere Pro 2024 (24.1.0)"
+]
 
-    def load_images_as_clips(
-        self,
-        images_dir: str,
-        duration_per_image: float = 3.0
-    ) -> list:
-        """
-        Load images from directory and convert to video clips.
-        
-        Args:
-            images_dir: Directory with images
-            duration_per_image: How long each image displays
-            
-        Returns:
-            List of ImageClip objects
-        """
-        images_path = Path(images_dir)
-        
-        if not images_path.exists():
-            raise FileNotFoundError(f"❌ Images directory not found: {images_path}")
-        
-        # Find all images (sorted by name)
-        image_files = sorted(
-            list(images_path.glob("*.png")) +
-            list(images_path.glob("*.jpg")) +
-            list(images_path.glob("*.jpeg"))
-        )
-        
-        if not image_files:
-            raise ValueError(f"❌ No images found in {images_path}")
-        
-        logger.info(f"📸 Found {len(image_files)} images")
-        
-        clips = []
-        for img_file in image_files:
-            try:
-                # Load image and create clip
-                img = Image.open(img_file)
-                logger.info(f"   Loading: {img_file.name} ({img.size[0]}x{img.size[1]})")
-                
-                clip = ImageClip(str(img_file)).set_duration(duration_per_image)
-                clips.append(clip)
-            except Exception as e:
-                logger.warning(f"   ⚠️  Failed to load {img_file.name}: {e}")
-                continue
-        
-        if not clips:
-            raise ValueError("❌ No valid images could be loaded")
-        
-        logger.info(f"✅ Loaded {len(clips)} video clips from images")
-        return clips
+def run_command(cmd):
+    try:
+        subprocess.run(cmd, check=True, encoding='utf-8', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError as e:
+        print(f"Error running command: {' '.join(cmd)}. Error: {e}")
+        sys.exit(1)
 
-    def load_audio(
-        self,
-        audio_file: str,
-        target_duration: Optional[float] = None
-    ) -> Optional[AudioFileClip]:
-        """
-        Load audio file and optionally trim to duration.
-        
-        Args:
-            audio_file: Path to audio file
-            target_duration: If set, trim audio to this duration
-            
-        Returns:
-            AudioFileClip or None
-        """
-        audio_path = Path(audio_file)
-        
-        if not audio_path.exists():
-            logger.warning(f"⚠️  Audio file not found: {audio_file}")
-            return None
-        
-        try:
-            audio = AudioFileClip(str(audio_path))
-            logger.info(f"🔊 Loaded audio: {audio_path.name} ({audio.duration:.1f}s)")
-            
-            # Trim if needed
-            if target_duration and audio.duration > target_duration:
-                logger.info(f"   Trimming audio from {audio.duration:.1f}s to {target_duration:.1f}s")
-                audio = audio.subclipped(0, target_duration)
-            
-            return audio
-        except Exception as e:
-            logger.error(f"❌ Failed to load audio: {e}")
-            return None
-
-    def load_subtitles(
-        self,
-        subtitles_file: str
-    ) -> Optional[dict]:
-        """
-        Load subtitles from SRT file.
-        
-        Args:
-            subtitles_file: Path to .srt file
-            
-        Returns:
-            Subtitles dict or None
-        """
-        subtitles_path = Path(subtitles_file)
-        
-        if not subtitles_path.exists():
-            logger.warning(f"⚠️  Subtitles file not found: {subtitles_file}")
-            return None
-        
-        try:
-            # Simple SRT parser
-            subtitles = {}
-            with open(subtitles_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # For now, just validate it's readable
-            if len(content) > 0:
-                logger.info(f"📝 Loaded subtitles: {subtitles_path.name}")
-                return {"path": str(subtitles_path), "data": content}
-            
-            return None
-        except Exception as e:
-            logger.error(f"❌ Failed to load subtitles: {e}")
-            return None
-
-    def assemble_from_chapter(
-        self,
-        chapter_dir: str,
-        output_file: str = "final_video.mp4",
-        image_duration: float = 3.0
-    ) -> str:
-        """
-        Assemble video from chapter directory.
-        
-        Expected structure:
-        chapter_dir/
-        ├── images/
-        │   ├── 001.png
-        │   ├── 002.png
-        │   └── ...
-        ├── audio.wav (or .mp3)
-        ├── subtitles.srt
-        └── metadata.json (optional)
-        
-        Args:
-            chapter_dir: Path to chapter directory
-            output_file: Output MP4 filename
-            image_duration: Duration per image in seconds
-            
-        Returns:
-            Path to output video
-        """
-        chapter_path = Path(chapter_dir)
-        
-        if not chapter_path.exists():
-            raise FileNotFoundError(f"❌ Chapter directory not found: {chapter_path}")
-        
-        logger.info(f"\n🎬 ===== ASSEMBLING VIDEO FROM CHAPTER =====")
-        logger.info(f"   Chapter: {chapter_path.absolute()}")
-        logger.info(f"")
-        
-        # Load images
-        images_dir = chapter_path / "images"
-        clips = self.load_images_as_clips(str(images_dir), image_duration)
-        
-        # Concatenate clips
-        logger.info(f"\n⛓️  Concatenating {len(clips)} clips...")
-        video = concatenate_videoclips(clips, method="chain")
-        video_duration = video.duration
-        logger.info(f"✅ Video duration: {video_duration:.1f}s")
-        
-        # Load audio
-        logger.info(f"")
-        audio_candidates = [
-            chapter_path / "audio.wav",
-            chapter_path / "audio.mp3",
-            chapter_path / "audio.m4a",
-        ]
-        audio = None
-        for audio_file in audio_candidates:
-            if audio_file.exists():
-                audio = self.load_audio(str(audio_file), target_duration=video_duration)
-                break
-        
-        if audio:
-            video = video.set_audio(audio)
-        
-        # Load subtitles (optional - just log)
-        logger.info(f"")
-        subtitles_file = chapter_path / "subtitles.srt"
-        subtitles = self.load_subtitles(str(subtitles_file))
-        
-        # Load metadata (optional)
-        logger.info(f"")
-        metadata_file = chapter_path / "metadata.json"
-        if metadata_file.exists():
-            try:
-                with open(metadata_file, 'r') as f:
-                    metadata = json.load(f)
-                logger.info(f"📋 Metadata: {json.dumps(metadata, indent=2)}")
-            except Exception as e:
-                logger.warning(f"⚠️  Failed to load metadata: {e}")
-        
-        # Write video
-        logger.info(f"\n💾 Writing video file...")
-        output_path = self.output_dir / output_file
-        
-        try:
-            video.write_videofile(
-                str(output_path),
-                fps=self.fps,
-                codec='libx264',
-                audio_codec='aac',
-                verbose=False,
-                logger=None,
-            )
-            logger.info(f"✅ Video created: {output_path}")
-            logger.info(f"   Size: {output_path.stat().st_size / (1024*1024):.1f} MB")
-            return str(output_path)
-        except Exception as e:
-            logger.error(f"❌ Failed to write video: {e}", exc_info=True)
-            raise
-        finally:
-            video.close()
-            if audio:
-                try:
-                    audio.close()
-                except:
-                    pass
-
-
-def find_chapter_directories() -> list:
-    """
-    Find all chapter directories in standard location.
+def download_file(url, folder, filename):
+    if not url:
+        return None
     
-    Returns:
-        List of chapter directories
-    """
-    chapters_root = Path("chapters")
-    if not chapters_root.exists():
-        return []
+    safe_filename = "".join([c for c in filename if c.isalnum() or c in "._-"]).strip()
+    filepath = os.path.join(folder, safe_filename)
     
-    chapters = sorted([
-        d for d in chapters_root.iterdir()
-        if d.is_dir() and (d / "images").exists()
-    ])
-    
-    return chapters
-
-
-def main():
-    """
-    Main entry point.
-    """
-    logger.info("\n" + "="*60)
-    logger.info("🎥 VIDEO ASSEMBLY PIPELINE - PRODUCTION")
-    logger.info("="*60)
+    os.makedirs(folder, exist_ok=True)
     
     try:
-        # Find chapters
-        chapters = find_chapter_directories()
-        
-        if not chapters:
-            logger.error("❌ No chapter directories found in ./chapters/")
-            logger.info("\nExpected structure:")
-            logger.info("  chapters/chapter_01/images/")
-            logger.info("  chapters/chapter_01/audio.wav")
-            logger.info("  chapters/chapter_01/subtitles.srt")
-            return 1
-        
-        logger.info(f"\n📂 Found {len(chapters)} chapter(s)")
-        
-        # Assemble each chapter
-        assembler = VideoAssembler(fps=30)
-        output_files = []
-        
-        for chapter_dir in chapters:
-            chapter_name = chapter_dir.name
-            output_file = f"{chapter_name}_final.mp4"
-            
-            logger.info(f"\n" + "="*60)
-            logger.info(f"Processing: {chapter_name}")
-            logger.info("="*60)
-            
-            try:
-                output = assembler.assemble_from_chapter(
-                    chapter_dir=str(chapter_dir),
-                    output_file=output_file,
-                    image_duration=3.0
-                )
-                output_files.append(output)
-                logger.info(f"✅ SUCCESS: {output}")
-            except Exception as e:
-                logger.error(f"❌ FAILED: {e}", exc_info=True)
-                return 1
-        
-        # Summary
-        logger.info(f"\n" + "="*60)
-        logger.info(f"🎉 ASSEMBLY COMPLETE!")
-        logger.info("="*60)
-        logger.info(f"\nCreated {len(output_files)} video(s):")
-        for output_file in output_files:
-            size_mb = Path(output_file).stat().st_size / (1024*1024)
-            logger.info(f"  ✅ {output_file} ({size_mb:.1f} MB)")
-        
-        return 0
-    
+        print(f"  Downloading: {url} -> {filepath}")
+        with requests.get(url, stream=True, timeout=30) as r:
+            r.raise_for_status()
+            with open(filepath, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        return filepath
     except Exception as e:
-        logger.error(f"\n❌ FATAL ERROR: {e}", exc_info=True)
-        return 1
+        print(f"  [WARN] Failed to download {url}: {e}")
+        return None
 
+def main():
+    print("===================================================")
+    print(f"   Mystic Narratives Assembler v3.0 ({'VERTICAL' if IS_PORTRAIT else 'HORIZONTAL'})")
+    print("===================================================")
+
+    chapter_count = 1
+    base_path = os.getcwd()
+    
+    video_title = "final_video"
+    if os.path.exists("project_metadata.json"):
+        try:
+            with open("project_metadata.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+                video_title = data.get("selectedTitle", "final_video")
+        except: pass
+            
+    safe_title = "".join([c for c in video_title if c.isalnum() or c in " ._-"]).strip()
+    output_file = f"{safe_title.replace(' ', '_')}.mp4"
+    
+    final_inputs = []
+    
+    for i in range(1, chapter_count + 1):
+        chapter_num = f"{i:02d}"
+        chapter_dir = os.path.join("chapters", f"chapter_{chapter_num}")
+        
+        if not os.path.exists(chapter_dir):
+            continue
+            
+        print(f"\nProcessing Chapter {chapter_num}...")
+        
+        images_dir = os.path.join(chapter_dir, "images")
+        images = sorted(glob.glob(os.path.join(images_dir, "*.[jJ][pP][gG]")) + 
+                        glob.glob(os.path.join(images_dir, "*.[jJ][pP][eE][gG]")) +
+                        glob.glob(os.path.join(images_dir, "*.[pP][nN][gG]")))
+        
+        if not images:
+            print(f"  [WARN] No images in chapter {chapter_num}, skipping...")
+            continue
+            
+        audio_path_mp3 = os.path.join(chapter_dir, "audio.mp3")
+        audio_path_wav = os.path.join(chapter_dir, "audio.wav")
+        audio_path = audio_path_mp3 if os.path.exists(audio_path_mp3) else audio_path_wav if os.path.exists(audio_path_wav) else None
+
+        if not audio_path:
+            print(f"  [WARN] No audio found for chapter {chapter_num}, skipping...")
+            continue
+        
+        try:
+            duration_str = subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', audio_path]).decode().strip()
+            duration = float(duration_str)
+        except:
+            duration = 10.0
+            
+        img_duration = duration / len(images)
+        total_frames = int(img_duration * 30)
+        
+        music_path = None
+        sfx_inputs = []
+        meta_path = os.path.join(chapter_dir, "metadata.json")
+        if os.path.exists(meta_path):
+            try:
+                with open(meta_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+                    
+                    if metadata.get('musicUrl'):
+                        music_ext = os.path.splitext(urlparse(metadata['musicUrl']).path)[1] or '.mp3'
+                        music_path = download_file(metadata['musicUrl'], chapter_dir, f"music{music_ext}")
+                    
+                    sfx_dir = os.path.join(chapter_dir, "sfx")
+                    for sfx_meta in metadata.get('sfxTimings', []):
+                        if sfx_meta.get('url'):
+                            sfx_path = download_file(sfx_meta['url'], sfx_dir, os.path.basename(sfx_meta['filePath']))
+                            if sfx_path:
+                                sfx_inputs.append({
+                                    'path': sfx_path,
+                                    'startTime': sfx_meta.get('startTime', 0),
+                                    'volume': sfx_meta.get('volume', 0.5)
+                                })
+            except Exception as e:
+                 print(f"  [WARN] Could not process metadata.json for chapter {chapter_num}: {e}")
+
+        chapter_out = os.path.join(chapter_dir, "chapter_out.mp4")
+        
+        cmd = ["ffmpeg", "-y"]
+        
+        for img in images:
+            cmd += ["-loop", "1", "-t", str(img_duration), "-i", img]
+            
+        cmd += ["-i", audio_path]
+        audio_idx = len(images)
+        
+        music_idx = -1
+        if music_path:
+            cmd += ["-stream_loop", "-1", "-i", music_path]
+            music_idx = audio_idx + 1
+        
+        sfx_start_idx = audio_idx + 2 if music_path else audio_idx + 1
+        for sfx in sfx_inputs:
+            cmd += ["-i", sfx['path']]
+
+        fc = []
+        for j in range(len(images)):
+            zoom = f"min(zoom+{ZOOM_SPEED},{MAX_ZOOM})"
+            fc.append(f"[{j}:v]scale={TARGET_WIDTH}:{TARGET_HEIGHT}:force_original_aspect_ratio=increase,crop={TARGET_WIDTH}:{TARGET_HEIGHT},zoompan=z='{zoom}':d={total_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={TARGET_WIDTH}x{TARGET_HEIGHT},setsar=1[v{j}]")
+        
+        concat_v = "".join([f"[v{j}]" for j in range(len(images))])
+        fc.append(f"{concat_v}concat=n={len(images)}:v=1:a=0[bg]")
+        
+        sub_path = os.path.abspath(os.path.join(chapter_dir, "subtitles.srt")).replace('\\', '/').replace(':', '\\:')
+        fc.append(f"[bg]subtitles='{sub_path}':force_style='{SUB_STYLE}'[v_final]")
+        
+        fc.append(f"[{audio_idx}:a]{SPEECH_FILTER}[speech]")
+        audio_sources = ["[speech]"]
+        
+        if music_path:
+            fc.append(f"[{music_idx}:a]volume={MUSIC_VOLUME}[mus]")
+            audio_sources.append("[mus]")
+            
+        for idx, sfx in enumerate(sfx_inputs):
+            curr_sfx_idx = sfx_start_idx + idx
+            delay_ms = int(sfx['startTime'] * 1000)
+            fc.append(f"[{curr_sfx_idx}:a]adelay={delay_ms}|{delay_ms},volume={sfx['volume']}[sfx{idx}]")
+            audio_sources.append(f"[sfx{idx}]")
+            
+        fc.append(f"{''.join(audio_sources)}amix=inputs={len(audio_sources)}:duration=first:dropout_transition=2[a_final]")
+        
+        cmd += ["-filter_complex", ";".join(fc)]
+        cmd += ["-map", "[v_final]", "-map", "[a_final]"]
+        cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18"]
+        cmd += METADATA_FLAGS + ["-shortest", chapter_out]
+        
+        run_command(cmd)
+        final_inputs.append(f"file 'chapters/chapter_{chapter_num}/chapter_out.mp4'")
+
+    with open("concat_list.txt", "w") as f:
+        f.write("\n".join(final_inputs))
+        
+    print(f"\nMerging all chapters to {output_file}...")
+    merge_cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "concat_list.txt", "-c", "copy"] + METADATA_FLAGS + [output_file]
+    run_command(merge_cmd)
+    
+    if os.path.exists("concat_list.txt"): os.remove("concat_list.txt")
+    print("\nSUCCESS! Video generated.")
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
