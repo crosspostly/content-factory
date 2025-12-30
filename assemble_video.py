@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Video Assembly Script
-Assembles video from generated slides, narration, and background music.
-Integrates with GitHub Actions workflow.
+Video Assembly Script - Production Ready
+Assembles video from chapter data (images + audio + subtitles).
 """
 
 import os
@@ -10,287 +9,350 @@ import sys
 import json
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Tuple
 
 from PIL import Image
 from moviepy.editor import (
     ImageClip,
     AudioFileClip,
     concatenate_videoclips,
-    CompositeAudioClip,
+    TextClip,
+    CompositeVideoClip,
 )
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('video_assembly.log')
+    ]
 )
 logger = logging.getLogger(__name__)
 
 
 class VideoAssembler:
-    """Assembles video from components."""
+    """Assembles production video from chapter components."""
 
-    def __init__(self, output_dir: str = ".", fps: int = 30):
+    def __init__(self, fps: int = 30, output_dir: str = "."):
         """
         Initialize VideoAssembler.
         
         Args:
-            output_dir: Directory for output video
-            fps: Frames per second for video
+            fps: Frames per second
+            output_dir: Output directory
         """
-        self.output_dir = Path(output_dir)
         self.fps = fps
+        self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"✅ Initialized VideoAssembler (fps={fps})")
 
-    def assemble_from_slides(
+    def load_images_as_clips(
         self,
-        slides_dir: str,
-        audio_file: Optional[str] = None,
-        slide_duration: float = 3.0,
-        output_file: str = "final_video.mp4",
-    ) -> str:
+        images_dir: str,
+        duration_per_image: float = 3.0
+    ) -> list:
         """
-        Assemble video from image slides.
+        Load images from directory and convert to video clips.
         
         Args:
-            slides_dir: Directory containing slide images
-            audio_file: Optional audio file to include
-            slide_duration: Duration each slide is shown (seconds)
-            output_file: Output video filename
+            images_dir: Directory with images
+            duration_per_image: How long each image displays
             
         Returns:
-            Path to assembled video
+            List of ImageClip objects
         """
-        slides_path = Path(slides_dir)
-        if not slides_path.exists():
-            raise FileNotFoundError(f"Slides directory not found: {slides_path}")
-
-        # Collect and sort slides
-        slide_files = sorted(
-            slides_path.glob("*.png") + slides_path.glob("*.jpg"),
-            key=lambda x: x.name
+        images_path = Path(images_dir)
+        
+        if not images_path.exists():
+            raise FileNotFoundError(f"❌ Images directory not found: {images_path}")
+        
+        # Find all images (sorted by name)
+        image_files = sorted(
+            list(images_path.glob("*.png")) +
+            list(images_path.glob("*.jpg")) +
+            list(images_path.glob("*.jpeg"))
         )
-
-        if not slide_files:
-            raise ValueError(f"No slide images found in {slides_path}")
-
-        logger.info(f"Found {len(slide_files)} slides")
-
-        # Create video clips from slides
+        
+        if not image_files:
+            raise ValueError(f"❌ No images found in {images_path}")
+        
+        logger.info(f"📸 Found {len(image_files)} images")
+        
         clips = []
-        for slide_file in slide_files:
+        for img_file in image_files:
             try:
-                clip = ImageClip(str(slide_file)).set_duration(slide_duration)
+                # Load image and create clip
+                img = Image.open(img_file)
+                logger.info(f"   Loading: {img_file.name} ({img.size[0]}x{img.size[1]})")
+                
+                clip = ImageClip(str(img_file)).set_duration(duration_per_image)
                 clips.append(clip)
-                logger.info(f"Loaded slide: {slide_file.name}")
             except Exception as e:
-                logger.warning(f"Failed to load slide {slide_file}: {e}")
+                logger.warning(f"   ⚠️  Failed to load {img_file.name}: {e}")
                 continue
-
+        
         if not clips:
-            raise ValueError("No valid slides could be loaded")
+            raise ValueError("❌ No valid images could be loaded")
+        
+        logger.info(f"✅ Loaded {len(clips)} video clips from images")
+        return clips
 
-        # Concatenate clips
-        logger.info(f"Concatenating {len(clips)} clips...")
-        final_clip = concatenate_videoclips(clips, method="chain")
-
-        # Add audio if provided
-        if audio_file and Path(audio_file).exists():
-            try:
-                audio = AudioFileClip(audio_file)
-                # Adjust video duration to match audio
-                video_duration = final_clip.duration
-                audio_duration = audio.duration
-                
-                if audio_duration > video_duration:
-                    logger.warning(
-                        f"Audio ({audio_duration}s) longer than video ({video_duration}s). "
-                        "Trimming audio."
-                    )
-                    audio = audio.subclipped(0, video_duration)
-                elif audio_duration < video_duration:
-                    logger.warning(
-                        f"Audio ({audio_duration}s) shorter than video ({video_duration}s). "
-                        "Will loop or pad."
-                    )
-                
-                final_clip = final_clip.set_audio(audio)
-                logger.info(f"Added audio: {audio_file}")
-            except Exception as e:
-                logger.warning(f"Failed to add audio: {e}")
-
-        # Write output
-        output_path = self.output_dir / output_file
-        logger.info(f"Writing video to {output_path}...")
+    def load_audio(
+        self,
+        audio_file: str,
+        target_duration: Optional[float] = None
+    ) -> Optional[AudioFileClip]:
+        """
+        Load audio file and optionally trim to duration.
+        
+        Args:
+            audio_file: Path to audio file
+            target_duration: If set, trim audio to this duration
+            
+        Returns:
+            AudioFileClip or None
+        """
+        audio_path = Path(audio_file)
+        
+        if not audio_path.exists():
+            logger.warning(f"⚠️  Audio file not found: {audio_file}")
+            return None
         
         try:
-            final_clip.write_videofile(
+            audio = AudioFileClip(str(audio_path))
+            logger.info(f"🔊 Loaded audio: {audio_path.name} ({audio.duration:.1f}s)")
+            
+            # Trim if needed
+            if target_duration and audio.duration > target_duration:
+                logger.info(f"   Trimming audio from {audio.duration:.1f}s to {target_duration:.1f}s")
+                audio = audio.subclipped(0, target_duration)
+            
+            return audio
+        except Exception as e:
+            logger.error(f"❌ Failed to load audio: {e}")
+            return None
+
+    def load_subtitles(
+        self,
+        subtitles_file: str
+    ) -> Optional[dict]:
+        """
+        Load subtitles from SRT file.
+        
+        Args:
+            subtitles_file: Path to .srt file
+            
+        Returns:
+            Subtitles dict or None
+        """
+        subtitles_path = Path(subtitles_file)
+        
+        if not subtitles_path.exists():
+            logger.warning(f"⚠️  Subtitles file not found: {subtitles_file}")
+            return None
+        
+        try:
+            # Simple SRT parser
+            subtitles = {}
+            with open(subtitles_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # For now, just validate it's readable
+            if len(content) > 0:
+                logger.info(f"📝 Loaded subtitles: {subtitles_path.name}")
+                return {"path": str(subtitles_path), "data": content}
+            
+            return None
+        except Exception as e:
+            logger.error(f"❌ Failed to load subtitles: {e}")
+            return None
+
+    def assemble_from_chapter(
+        self,
+        chapter_dir: str,
+        output_file: str = "final_video.mp4",
+        image_duration: float = 3.0
+    ) -> str:
+        """
+        Assemble video from chapter directory.
+        
+        Expected structure:
+        chapter_dir/
+        ├── images/
+        │   ├── 001.png
+        │   ├── 002.png
+        │   └── ...
+        ├── audio.wav (or .mp3)
+        ├── subtitles.srt
+        └── metadata.json (optional)
+        
+        Args:
+            chapter_dir: Path to chapter directory
+            output_file: Output MP4 filename
+            image_duration: Duration per image in seconds
+            
+        Returns:
+            Path to output video
+        """
+        chapter_path = Path(chapter_dir)
+        
+        if not chapter_path.exists():
+            raise FileNotFoundError(f"❌ Chapter directory not found: {chapter_path}")
+        
+        logger.info(f"\n🎬 ===== ASSEMBLING VIDEO FROM CHAPTER =====")
+        logger.info(f"   Chapter: {chapter_path.absolute()}")
+        logger.info(f"")
+        
+        # Load images
+        images_dir = chapter_path / "images"
+        clips = self.load_images_as_clips(str(images_dir), image_duration)
+        
+        # Concatenate clips
+        logger.info(f"\n⛓️  Concatenating {len(clips)} clips...")
+        video = concatenate_videoclips(clips, method="chain")
+        video_duration = video.duration
+        logger.info(f"✅ Video duration: {video_duration:.1f}s")
+        
+        # Load audio
+        logger.info(f"")
+        audio_candidates = [
+            chapter_path / "audio.wav",
+            chapter_path / "audio.mp3",
+            chapter_path / "audio.m4a",
+        ]
+        audio = None
+        for audio_file in audio_candidates:
+            if audio_file.exists():
+                audio = self.load_audio(str(audio_file), target_duration=video_duration)
+                break
+        
+        if audio:
+            video = video.set_audio(audio)
+        
+        # Load subtitles (optional - just log)
+        logger.info(f"")
+        subtitles_file = chapter_path / "subtitles.srt"
+        subtitles = self.load_subtitles(str(subtitles_file))
+        
+        # Load metadata (optional)
+        logger.info(f"")
+        metadata_file = chapter_path / "metadata.json"
+        if metadata_file.exists():
+            try:
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+                logger.info(f"📋 Metadata: {json.dumps(metadata, indent=2)}")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to load metadata: {e}")
+        
+        # Write video
+        logger.info(f"\n💾 Writing video file...")
+        output_path = self.output_dir / output_file
+        
+        try:
+            video.write_videofile(
                 str(output_path),
                 fps=self.fps,
+                codec='libx264',
+                audio_codec='aac',
                 verbose=False,
                 logger=None,
             )
-            logger.info(f"Video successfully created: {output_path}")
+            logger.info(f"✅ Video created: {output_path}")
+            logger.info(f"   Size: {output_path.stat().st_size / (1024*1024):.1f} MB")
             return str(output_path)
         except Exception as e:
-            logger.error(f"Failed to write video: {e}")
+            logger.error(f"❌ Failed to write video: {e}", exc_info=True)
             raise
         finally:
-            final_clip.close()
-            if audio_file and Path(audio_file).exists():
+            video.close()
+            if audio:
                 try:
                     audio.close()
                 except:
                     pass
 
-    def assemble_from_config(
-        self,
-        config_file: str,
-        output_file: str = "final_video.mp4",
-    ) -> str:
-        """
-        Assemble video from configuration file.
-        
-        Config structure:
-        {
-            "slides_dir": "path/to/slides",
-            "audio_file": "path/to/audio.mp3",
-            "slide_duration": 3.0,
-            "fps": 30
-        }
-        
-        Args:
-            config_file: Path to JSON config file
-            output_file: Output video filename
-            
-        Returns:
-            Path to assembled video
-        """
-        config_path = Path(config_file)
-        if not config_path.exists():
-            raise FileNotFoundError(f"Config file not found: {config_file}")
 
-        with open(config_path, "r") as f:
-            config = json.load(f)
-
-        logger.info(f"Loaded config from {config_file}")
-
-        slides_dir = config.get("slides_dir")
-        audio_file = config.get("audio_file")
-        slide_duration = config.get("slide_duration", 3.0)
-        fps = config.get("fps", 30)
-
-        if not slides_dir:
-            raise ValueError("Config missing 'slides_dir'")
-
-        self.fps = fps
-
-        return self.assemble_from_slides(
-            slides_dir=slides_dir,
-            audio_file=audio_file,
-            slide_duration=slide_duration,
-            output_file=output_file,
-        )
-
-
-def find_latest_project_data() -> Optional[Dict[str, Any]]:
+def find_chapter_directories() -> list:
     """
-    Find latest project data from GitHub workflow context.
+    Find all chapter directories in standard location.
     
     Returns:
-        Project metadata or None
+        List of chapter directories
     """
-    # Check environment variables from GitHub Actions
-    github_ref = os.getenv("GITHUB_REF", "")
-    github_sha = os.getenv("GITHUB_SHA", "")
-    github_run_id = os.getenv("GITHUB_RUN_ID", "")
-
-    if not github_ref or not github_ref.startswith("refs/heads/project/"):
-        logger.warning("Not running in project branch context")
-        return None
-
-    # Extract project ID from branch name
-    project_branch = github_ref.replace("refs/heads/", "")
-    project_id = project_branch.replace("project/", "")
-
-    return {
-        "project_id": project_id,
-        "branch": project_branch,
-        "commit": github_sha,
-        "run_id": github_run_id,
-    }
+    chapters_root = Path("chapters")
+    if not chapters_root.exists():
+        return []
+    
+    chapters = sorted([
+        d for d in chapters_root.iterdir()
+        if d.is_dir() and (d / "images").exists()
+    ])
+    
+    return chapters
 
 
 def main():
     """
-    Main entry point for video assembly.
+    Main entry point.
     """
-    logger.info("Starting video assembly process...")
-
-    # Try to load configuration
-    config_files = [
-        "video_config.json",
-        "config/video_config.json",
-    ]
-
-    config_file = None
-    for cf in config_files:
-        if Path(cf).exists():
-            config_file = cf
-            break
-
-    assembler = VideoAssembler()
-
+    logger.info("\n" + "="*60)
+    logger.info("🎥 VIDEO ASSEMBLY PIPELINE - PRODUCTION")
+    logger.info("="*60)
+    
     try:
-        if config_file:
-            logger.info(f"Using config file: {config_file}")
-            output = assembler.assemble_from_config(config_file)
-        else:
-            # Try default directories
-            slides_dir = "slides"
-            audio_file = None
-
-            # Look for audio file
-            for ext in [".mp3", ".wav", ".m4a"]:
-                audio_candidates = list(Path(".").glob(f"*{ext}"))
-                if audio_candidates:
-                    audio_file = str(audio_candidates[0])
-                    break
-
-            if not Path(slides_dir).exists():
-                logger.error(f"Slides directory not found: {slides_dir}")
-                logger.info("Creating sample slides for testing...")
-                Path(slides_dir).mkdir(exist_ok=True)
-                
-                # Create a test slide
-                img = Image.new('RGB', (1280, 720), color='blue')
-                img.save(f"{slides_dir}/slide_001.png")
-                logger.info("Created test slide")
-
-            logger.info(f"Using slides from: {slides_dir}")
-            if audio_file:
-                logger.info(f"Using audio: {audio_file}")
-            else:
-                logger.info("No audio file found, creating video with slides only")
-
-            output = assembler.assemble_from_slides(
-                slides_dir=slides_dir,
-                audio_file=audio_file,
-            )
-
-        logger.info(f"✅ Video assembly completed successfully!")
-        logger.info(f"Output: {output}")
+        # Find chapters
+        chapters = find_chapter_directories()
         
-        # Log project metadata if available
-        project_data = find_latest_project_data()
-        if project_data:
-            logger.info(f"Project metadata: {json.dumps(project_data, indent=2)}")
-
+        if not chapters:
+            logger.error("❌ No chapter directories found in ./chapters/")
+            logger.info("\nExpected structure:")
+            logger.info("  chapters/chapter_01/images/")
+            logger.info("  chapters/chapter_01/audio.wav")
+            logger.info("  chapters/chapter_01/subtitles.srt")
+            return 1
+        
+        logger.info(f"\n📂 Found {len(chapters)} chapter(s)")
+        
+        # Assemble each chapter
+        assembler = VideoAssembler(fps=30)
+        output_files = []
+        
+        for chapter_dir in chapters:
+            chapter_name = chapter_dir.name
+            output_file = f"{chapter_name}_final.mp4"
+            
+            logger.info(f"\n" + "="*60)
+            logger.info(f"Processing: {chapter_name}")
+            logger.info("="*60)
+            
+            try:
+                output = assembler.assemble_from_chapter(
+                    chapter_dir=str(chapter_dir),
+                    output_file=output_file,
+                    image_duration=3.0
+                )
+                output_files.append(output)
+                logger.info(f"✅ SUCCESS: {output}")
+            except Exception as e:
+                logger.error(f"❌ FAILED: {e}", exc_info=True)
+                return 1
+        
+        # Summary
+        logger.info(f"\n" + "="*60)
+        logger.info(f"🎉 ASSEMBLY COMPLETE!")
+        logger.info("="*60)
+        logger.info(f"\nCreated {len(output_files)} video(s):")
+        for output_file in output_files:
+            size_mb = Path(output_file).stat().st_size / (1024*1024)
+            logger.info(f"  ✅ {output_file} ({size_mb:.1f} MB)")
+        
         return 0
-
+    
     except Exception as e:
-        logger.error(f"❌ Video assembly failed: {e}", exc_info=True)
+        logger.error(f"\n❌ FATAL ERROR: {e}", exc_info=True)
         return 1
 
 
