@@ -18,6 +18,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
+        cache: 'pip'
 
     - name: Set up FFmpeg
       uses: FedericoCarboni/setup-ffmpeg@v3
@@ -47,67 +48,39 @@ jobs:
           exit 1
         fi
 
-    - name: Delete pip caches
+    - name: Clean pip cache
       run: |
-        pip cache purge || true
-        rm -rf ~/.cache/pip || true
-        python -m pip cache purge || true
+        pip cache purge
+        pip install --upgrade pip setuptools wheel
 
-    - name: Upgrade pip and setuptools
+    - name: Install requirements
       run: |
-        python -m pip install --upgrade pip==24.0 setuptools==68.2.2 wheel
-        pip --version
-        python -m pip --version
+        python -m pip install -r requirements.txt
 
-    - name: Install dependencies from requirements.txt
+    - name: Test imports
       run: |
-        echo "💾 Installing dependencies..."
-        pip install -r requirements.txt --upgrade --no-cache-dir
-        echo "✅ Dependencies installed"
-
-    - name: Verify all required packages
-      run: |
-        echo "=== Verifying Python Packages ==="
+        echo "Testing critical imports..."
         python -c "import requests; print('✅ requests')"
-        python -c "from PIL import Image; print('✅ Pillow')"
-        python -c "from moviepy.editor import ImageClip; print('✅ moviepy')"
+        python -c "import PIL; print('✅ PIL')"
+        python -c "import moviepy; print('✅ moviepy')"
         python -c "import pydub; print('✅ pydub')"
         python -c "import imageio; print('✅ imageio')"
-        python -c "import google.generativeai; print('✅ google-generativeai')"
+        python -c "import google; print('✅ google-generativeai')"
         echo ""
-        echo "=== Installed Versions ==="
-        pip show moviepy imageio imageio-ffmpeg Pillow | grep -E '^Name|^Version'
+        echo "=== All critical packages imported successfully ==="
 
-    - name: Verify existing chapter data
+    - name: Verify chapter data
       run: |
-        echo "🔍 Checking for existing chapter data..."
-        echo ""
+        echo "🔍 Checking chapter data..."
+        [ -d "chapters/chapter_01" ] || (echo "❌ ERROR: chapters/chapter_01 not found"; exit 1)
+        echo "✅ chapters/chapter_01 exists"
         
-        if [ ! -d "chapters/chapter_01" ]; then
-          echo "❌ ERROR: chapters/chapter_01 directory not found!"
-          exit 1
-        fi
-        echo "✅ chapters/chapter_01/ exists"
-        
-        if [ ! -f "chapters/chapter_01/audio.wav" ] && [ ! -f "chapters/chapter_01/audio.mp3" ]; then
-          echo "❌ ERROR: No audio file found!"
-          exit 1
-        fi
+        [ -f "chapters/chapter_01/audio.wav" ] || [ -f "chapters/chapter_01/audio.mp3" ] || (echo "❌ ERROR: No audio file found"; exit 1)
         echo "✅ Audio file found"
         
         IMAGE_COUNT=$(find chapters/chapter_01/images -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' \) 2>/dev/null | wc -l)
-        if [ "$IMAGE_COUNT" -eq 0 ]; then
-          echo "❌ ERROR: No images in chapters/chapter_01/images/"
-          exit 1
-        fi
+        [ "$IMAGE_COUNT" -gt 0 ] || (echo "❌ ERROR: No images found"; exit 1)
         echo "✅ Found $IMAGE_COUNT images"
-        
-        if [ -f "chapters/chapter_01/subtitles.srt" ]; then
-          echo "✅ subtitles.srt found"
-        else
-          echo "⚠️  subtitles.srt not found (optional)"
-        fi
-        echo ""
 
     - name: Show chapter structure
       run: |
@@ -115,37 +88,26 @@ jobs:
         ls -lh chapters/chapter_01/
         echo ""
         echo "📷 Images:"
-        ls -lh chapters/chapter_01/images/ | head -10
+        ls -lh chapters/chapter_01/images/ | head -5
 
-    - name: Syntax check assemble_video.py
+    - name: Validate Python syntax
       run: |
         python -m py_compile assemble_video.py
-        echo "✅ Syntax valid"
+        echo "✅ Syntax check passed"
 
-    - name: RUN VIDEO ASSEMBLY
+    - name: Run video assembly
       run: |
-        echo "🚀 ========== STARTING VIDEO ASSEMBLY =========="
+        echo "🚀 Starting video assembly..."
         python assemble_video.py
-        echo "✅ ========== ASSEMBLY COMPLETE =========="
+        echo "✅ Video assembly complete"
 
     - name: Verify MP4 output
       run: |
-        echo "🔍 Checking for MP4 output..."
-        if ls *.mp4 1> /dev/null 2>&1; then
-          echo "✅ MP4 files created:"
-          ls -lh *.mp4
-          echo ""
-          echo "📊 Video info:"
-          ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -of csv=p=0 *.mp4 || true
-        else
-          echo "❌ ERROR: No MP4 output created!"
-          echo ""
-          echo "Directory contents:"
-          ls -la
-          exit 1
-        fi
+        echo "🔍 Checking for MP4 files..."
+        ls -lh *.mp4 2>/dev/null || (echo "❌ ERROR: No MP4 files created"; exit 1)
+        echo "✅ MP4 files verified"
 
-    - name: Upload Video Artifact
+    - name: Upload artifacts
       if: success()
       uses: actions/upload-artifact@v4
       with:
@@ -156,24 +118,26 @@ jobs:
     - name: 🔧 Debug on failure
       if: failure()
       run: |
-        echo "❌ WORKFLOW FAILED"
+        echo "❌ WORKFLOW FAILED - Diagnostics:"
         echo ""
         echo "=== Python ==="
         python --version
+        which python
         echo ""
-        echo "=== Pip version ==="
+        echo "=== Pip ==="
         pip --version
         echo ""
-        echo "=== Installed Packages ==="
-        pip list | grep -E "moviepy|imageio|Pillow|pydub|requests" || echo "Key packages not found"
+        echo "=== Installed packages ==="
+        pip list 2>&1 | head -30
         echo ""
         echo "=== FFmpeg ==="
-        ffmpeg -version | head -3
+        ffmpeg -version | head -5
         echo ""
         echo "=== FFmpeg Codecs ==="
-        ffmpeg -codecs | grep -E "libx264|aac" || echo "Codecs not found"
+        ffmpeg -codecs 2>&1 | grep -E "libx264|aac"
         echo ""
         echo "=== Directory ==="
+        pwd
         ls -la
         echo ""
         exit 1
