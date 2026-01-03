@@ -8,9 +8,10 @@ requests==2.31.0
 # Part 2: TTS Generator (Gemini 2.5 Flash TTS)
 pydub==0.25.1
 
-# Part 3: Video Renderer (moviepy)
-moviepy==1.0.3
-imageio-ffmpeg==0.4.9
+# Part 3: Video Renderer (moviepy) - FIXED VERSIONS
+moviepy==1.0.3.5
+imageio==2.28.1
+imageio-ffmpeg==0.4.10
 Pillow==10.2.0
 numpy==1.26.4
 
