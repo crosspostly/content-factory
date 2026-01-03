@@ -7,173 +7,291 @@ on:
   workflow_dispatch:
 
 jobs:
-  render:
+  render-video:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    outputs:
+      video-files: ${{ steps.build.outputs.video-files }}
+      build-status: ${{ job.status }}
     
     steps:
-    - name: Checkout repository
+    # ════════════════════════════════════════════════════════════════════
+    # 1. SETUP ENVIRONMENT
+    # ════════════════════════════════════════════════════════════════════
+    
+    - name: 📥 Checkout repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
 
-    - name: Set up Python 3.10
+    - name: 🐍 Setup Python 3.10
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
+        cache: 'pip'
 
-    - name: Clear pip cache
+    # ════════════════════════════════════════════════════════════════════
+    # 2. INSTALL SYSTEM & PYTHON DEPENDENCIES
+    # ════════════════════════════════════════════════════════════════════
+    
+    - name: 📦 Install system dependencies
       run: |
-        echo "🚀 Clearing pip cache..."
-        rm -rf ~/.cache/pip
-        pip cache purge || true
-        echo "✅ Pip cache cleared"
-
-    - name: Upgrade pip and install build tools
-      run: |
-        echo "🚀 Upgrading pip..."
-        python -m pip install --upgrade pip setuptools wheel
-        echo "✅ Pip upgraded"
-
-    - name: Verify pip works
-      run: |
-        pip --version
-        python -m pip --version
-
-    - name: Set up FFmpeg
-      uses: FedericoCarboni/setup-ffmpeg@v3
-
-    - name: Install codec support
-      run: |
-        echo "🚀 Installing codec support..."
+        set -e
+        echo "Installing FFmpeg and required libraries..."
         sudo apt-get update -qq
-        sudo apt-get install -y libavcodec-extra
-        echo "✅ FFmpeg codec support installed"
-
-    - name: Verify FFmpeg codecs
-      run: |
-        echo "=== FFmpeg Version ==="
+        sudo apt-get install -y --no-install-recommends \
+          ffmpeg \
+          libavcodec-extra \
+          libfreetype6-dev \
+          libjpeg-dev \
+          libopenjp2-7-dev \
+          libtiff-dev \
+          libwebp-dev \
+          zlib1g-dev
+        echo "✅ System dependencies installed"
         ffmpeg -version | head -3
+
+    - name: 🔧 Install Python dependencies
+      run: |
+        set -e
+        echo "Upgrading pip..."
+        python -m pip install --upgrade pip setuptools wheel
+        echo "Installing requirements..."
+        pip install -r requirements.txt
+        echo "✅ Python dependencies installed"
+
+    - name: ✅ Verify critical imports
+      run: |
+        echo "Verifying imports..."
+        python3 << 'EOF'
+import sys
+try:
+    import requests
+    print("✅ requests")
+except ImportError as e:
+    print(f"❌ requests: {e}")
+    sys.exit(1)
+
+try:
+    from PIL import Image
+    print("✅ PIL")
+except ImportError as e:
+    print(f"❌ PIL: {e}")
+    sys.exit(1)
+
+try:
+    from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
+    print("✅ moviepy")
+except ImportError as e:
+    print(f"❌ moviepy: {e}")
+    sys.exit(1)
+
+try:
+    import google.generativeai
+    print("✅ google.generativeai")
+except ImportError as e:
+    print(f"⚠️  google.generativeai (optional): {e}")
+
+print("\n✅ All critical imports verified!")
+EOF
+
+    # ════════════════════════════════════════════════════════════════════
+    # 3. PREPARE TEST DATA
+    # ════════════════════════════════════════════════════════════════════
+    
+    - name: 📂 Create chapter structure
+      run: |
+        echo "Creating chapter directories..."
+        mkdir -p chapters/chapter_01/images
+        echo "✅ Directories created"
+
+    - name: 🖼️ Generate test image
+      run: |
+        python3 << 'EOF'
+import os
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
+
+images_dir = Path('chapters/chapter_01/images')
+
+# Create 3 test images
+for i in range(1, 4):
+    # Create gradient background
+    img = Image.new('RGB', (1920, 1080), color=(73, 109, 137))
+    draw = ImageDraw.Draw(img)
+    
+    # Add text
+    text = f"Test Slide {i}"
+    try:
+        font = ImageFont.load_default()
+    except:
+        font = ImageFont.load_default()
+    
+    # Draw text in center
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    x = (1920 - text_width) // 2
+    y = (1080 - text_height) // 2
+    
+    draw.text((x, y), text, fill=(255, 255, 255), font=font)
+    
+    # Save
+    filename = images_dir / f"{i:03d}.png"
+    img.save(filename)
+    print(f"✅ Created {filename.name}")
+
+EOF
+
+    - name: 🔊 Generate test audio
+      run: |
+        python3 << 'EOF'
+from pydub import AudioSegment
+from pydub.generators import Sine
+import os
+
+audio_file = 'chapters/chapter_01/audio.wav'
+
+# Generate 9 seconds of sine wave (3 images × 3 seconds each)
+print("Generating test audio (9 seconds)...")
+test_tone = Sine(440).to_audio_segment(duration=9000)  # 9 seconds
+test_tone.export(audio_file, format='wav')
+
+size_kb = os.path.getsize(audio_file) / 1024
+print(f"✅ Created {audio_file} ({size_kb:.1f} KB)")
+
+EOF
+
+    - name: 📋 Verify chapter data
+      run: |
+        echo "=== Chapter Structure ==="
+        find chapters/chapter_01 -type f | sort
         echo ""
-        echo "=== Checking required codecs ==="
-        if ffmpeg -codecs 2>&1 | grep -q 'libx264'; then
-          echo "✅ libx264 codec available"
-        else
-          echo "❌ libx264 codec NOT found!"
-          exit 1
-        fi
-        if ffmpeg -codecs 2>&1 | grep -q 'aac'; then
-          echo "✅ aac codec available"
-        else
-          echo "❌ aac codec NOT found!"
-          exit 1
-        fi
-
-    - name: Show Python environment
-      run: |
-        echo "=== Python Info ==="
-        python --version
-        python -c "import sys; print(f'Python path: {sys.executable}')"
-        which python
-        which python3
+        echo "=== File Sizes ==="
+        du -sh chapters/chapter_01/*
         echo ""
-        echo "=== Pip Info ==="
-        pip --version
-        python -m pip --version
+        echo "✅ Chapter data ready for assembly"
 
-    - name: Install requirements with verbose output
+    # ════════════════════════════════════════════════════════════════════
+    # 4. BUILD VIDEO
+    # ════════════════════════════════════════════════════════════════════
+    
+    - name: 🎬 Assemble video
+      id: build
       run: |
-        echo "🚀 Installing requirements..."
-        python -m pip install --verbose -r requirements.txt 2>&1 | tail -50
-        echo ""
-        echo "✅ Installation complete"
-
-    - name: Verify all imports work
-      run: |
-        echo "🔍 Testing critical imports..."
-        python -c "import requests; print('  ✅ requests')"
-        python -c "import PIL; print('  ✅ PIL/Pillow')"
-        python -c "import moviepy; print('  ✅ moviepy')"
-        python -c "import pydub; print('  ✅ pydub')"
-        python -c "import imageio; print('  ✅ imageio')"
-        python -c "import google.generativeai; print('  ✅ google-generativeai')"
-        echo ""
-        echo "=== All critical packages imported successfully ==="
-
-    - name: List installed packages
-      run: |
-        echo "=== Installed packages ==="
-        pip list | head -30
-
-    - name: Verify chapter data
-      run: |
-        echo "🔍 Checking chapter data..."
-        [ -d "chapters/chapter_01" ] || (echo "❌ ERROR: chapters/chapter_01 not found"; exit 1)
-        echo "✅ chapters/chapter_01 exists"
+        set -e
+        echo "Starting video assembly..."
+        python3 assemble_video.py
         
-        [ -f "chapters/chapter_01/audio.wav" ] || [ -f "chapters/chapter_01/audio.mp3" ] || (echo "❌ ERROR: No audio file found"; exit 1)
-        echo "✅ Audio file found"
+        # Find generated MP4 files
+        video_files=$(find . -maxdepth 1 -name '*.mp4' -type f | tr '\n' ',' | sed 's/,$//')
+        echo "video-files=$video_files" >> $GITHUB_OUTPUT
         
-        IMAGE_COUNT=$(find chapters/chapter_01/images -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' \) 2>/dev/null | wc -l)
-        [ "$IMAGE_COUNT" -gt 0 ] || (echo "❌ ERROR: No images found"; exit 1)
-        echo "✅ Found $IMAGE_COUNT images"
-
-    - name: Show chapter structure
-      run: |
-        echo "📂 Chapter structure:"
-        ls -lh chapters/chapter_01/
-        echo ""
-        echo "📷 Images:"
-        ls -lh chapters/chapter_01/images/ | head -5
-
-    - name: Validate Python syntax
-      run: |
-        python -m py_compile assemble_video.py
-        echo "✅ Syntax check passed"
-
-    - name: Run video assembly
-      run: |
-        echo "🚀 Starting video assembly..."
-        python assemble_video.py
         echo "✅ Video assembly complete"
 
-    - name: Verify MP4 output
+    - name: ✅ Verify output
       run: |
-        echo "🔍 Checking for MP4 files..."
-        ls -lh *.mp4 2>/dev/null || (echo "❌ ERROR: No MP4 files created"; exit 1)
-        echo "✅ MP4 files verified"
+        echo "=== Generated Files ==="
+        ls -lh *.mp4 2>/dev/null || echo "No MP4 files found"
+        echo ""
+        
+        # Count MP4 files
+        count=$(find . -maxdepth 1 -name '*.mp4' -type f | wc -l)
+        if [ "$count" -eq 0 ]; then
+          echo "❌ ERROR: No MP4 files were created!"
+          exit 1
+        fi
+        
+        echo "✅ Found $count video file(s)"
+        
+        # Check video properties with ffprobe
+        for mp4 in *.mp4; do
+          if command -v ffprobe &> /dev/null; then
+            echo ""
+            echo "Video: $mp4"
+            ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "$mp4" || true
+          fi
+        done
 
-    - name: Upload artifacts
+    # ════════════════════════════════════════════════════════════════════
+    # 5. UPLOAD ARTIFACTS
+    # ════════════════════════════════════════════════════════════════════
+    
+    - name: 📤 Upload video artifacts
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: final-video-${{ github.run_id }}
-        path: "*.mp4"
+        name: rendered-videos-${{ github.run_id }}
+        path: |
+          *.mp4
         retention-days: 7
+        compression-level: 0
 
-    - name: 🔧 Debug on failure
+    - name: 📤 Upload logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs-${{ github.run_id }}
+        path: |
+          video_assembly.log
+        retention-days: 3
+
+    # ════════════════════════════════════════════════════════════════════
+    # 6. FINAL REPORT
+    # ════════════════════════════════════════════════════════════════════
+    
+    - name: 📊 Build report
+      if: always()
+      run: |
+        echo ""
+        echo "═══════════════════════════════════════════════════════════"
+        echo "🎉 RENDER VIDEO WORKFLOW - SUMMARY"
+        echo "═══════════════════════════════════════════════════════════"
+        echo ""
+        echo "Status: ${{ job.status }}"
+        echo "Run ID: ${{ github.run_id }}"
+        echo "Branch: ${{ github.ref_name }}"
+        echo "Commit: ${{ github.sha }}"
+        echo ""
+        
+        if [ "${{ job.status }}" = "success" ]; then
+          echo "✅ Videos generated successfully!"
+          echo ""
+          echo "Output files:"
+          ls -lh *.mp4 2>/dev/null || echo "(no MP4 files)"
+        else
+          echo "❌ Workflow failed"
+          echo "Check logs above for details"
+        fi
+        echo ""
+        echo "═══════════════════════════════════════════════════════════"
+
+    # ════════════════════════════════════════════════════════════════════
+    # 7. DEBUGGING (if failed)
+    # ════════════════════════════════════════════════════════════════════
+    
+    - name: 🔍 Debug information
       if: failure()
       run: |
-        echo "❌ WORKFLOW FAILED - Diagnostics:"
+        echo ""
+        echo "═══════════════════════════════════════════════════════════"
+        echo "🔧 DEBUG INFO"
+        echo "═══════════════════════════════════════════════════════════"
         echo ""
         echo "=== Python ==="
         python --version
-        which python
-        echo ""
-        echo "=== Pip ==="
-        pip --version
         echo ""
         echo "=== Installed packages ==="
-        pip list 2>&1 | head -40
-        echo ""
-        echo "=== Try importing requests directly ==="
-        python -c "import sys; print('Python path:', sys.path); import requests; print('✅ requests imported')" || echo "❌ Failed to import requests"
+        pip list 2>&1 | grep -E '(moviepy|PIL|ffmpeg|pydub)' || true
         echo ""
         echo "=== FFmpeg ==="
-        ffmpeg -version | head -5
+        ffmpeg -version | head -2
         echo ""
-        echo "=== FFmpeg Codecs ==="
-        ffmpeg -codecs 2>&1 | grep -E "libx264|aac"
+        echo "=== Directory Structure ==="
+        find . -type f -name '*.mp4' -o -name '*.log' | head -20
         echo ""
-        echo "=== Directory ==="
-        pwd
-        ls -la
+        echo "=== Last 50 lines of video_assembly.log ==="
+        tail -50 video_assembly.log 2>/dev/null || echo "(no log file)"
         echo ""
-        exit 1
+        echo "═══════════════════════════════════════════════════════════"

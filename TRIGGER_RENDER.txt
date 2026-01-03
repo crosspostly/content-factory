@@ -1,0 +1,3 @@
+Trigger render_video workflow
+This file triggers the render_video workflow on project branch
+Timestamp: 2026-01-03 16:22 MSK

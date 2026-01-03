@@ -257,10 +257,7 @@ class VideoAssembler:
                 fps=self.fps,
                 codec='libx264',
                 audio_codec='aac',
-                preset='ultrafast',
-                threads=4,
                 verbose=False,
-                logger=None,
             )
             logger.info(f"✅ Video created: {output_path}")
             logger.info(f"   Size: {output_path.stat().st_size / (1024*1024):.1f} MB")
