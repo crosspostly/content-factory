@@ -22,6 +22,31 @@ jobs:
     - name: Set up FFmpeg
       uses: FedericoCarboni/setup-ffmpeg@v3
 
+    - name: Install codec support
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y libavcodec-extra
+        echo "✅ FFmpeg codec support installed"
+
+    - name: Verify FFmpeg codecs
+      run: |
+        echo "=== FFmpeg Version ==="
+        ffmpeg -version | head -3
+        echo ""
+        echo "=== Checking required codecs ==="
+        if ffmpeg -codecs | grep -q 'libx264'; then
+          echo "✅ libx264 codec available"
+        else
+          echo "❌ libx264 codec NOT found!"
+          exit 1
+        fi
+        if ffmpeg -codecs | grep -q 'aac'; then
+          echo "✅ aac codec available"
+        else
+          echo "❌ aac codec NOT found!"
+          exit 1
+        fi
+
     - name: Delete pip caches
       run: |
         pip cache purge || true
@@ -29,18 +54,19 @@ jobs:
 
     - name: Upgrade pip
       run: |
-        python -m pip install --upgrade --no-cache-dir pip setuptools wheel
+        python -m pip install --upgrade pip==24.0 setuptools==68.2.2 wheel
         pip --version
 
     - name: Install dependencies
       run: |
-        pip install --no-cache-dir --force-reinstall --no-deps --upgrade -r requirements.txt
+        pip install --no-cache-dir -r requirements.txt
 
     - name: Verify dependencies
       run: |
         python -c "from PIL import Image; print('✅ Pillow')"
         python -c "from moviepy.editor import ImageClip; print('✅ moviepy')"
         python -c "import pydub; print('✅ pydub')"
+        python -c "import imageio; print('✅ imageio')"
 
     - name: Verify existing chapter data
       run: |
@@ -126,10 +152,13 @@ jobs:
         python --version
         echo ""
         echo "=== Packages ==="
-        pip list | grep -E "Pillow|moviepy|pydub" || echo "Packages not found"
+        pip list | grep -E "Pillow|moviepy|imageio|pydub" || echo "Packages not found"
         echo ""
         echo "=== FFmpeg ==="
         ffmpeg -version | head -3
+        echo ""
+        echo "=== FFmpeg Codecs ==="
+        ffmpeg -codecs | grep -E "libx264|aac" || echo "Codecs not found"
         echo ""
         echo "=== Directory ==="
         ls -la
