@@ -51,22 +51,32 @@ jobs:
       run: |
         pip cache purge || true
         rm -rf ~/.cache/pip || true
+        python -m pip cache purge || true
 
-    - name: Upgrade pip
+    - name: Upgrade pip and setuptools
       run: |
         python -m pip install --upgrade pip==24.0 setuptools==68.2.2 wheel
         pip --version
+        python -m pip --version
 
-    - name: Install dependencies
+    - name: Install dependencies from requirements.txt
       run: |
-        pip install --no-cache-dir -r requirements.txt
+        echo "💾 Installing dependencies..."
+        pip install -r requirements.txt --upgrade --no-cache-dir
+        echo "✅ Dependencies installed"
 
-    - name: Verify dependencies
+    - name: Verify all required packages
       run: |
+        echo "=== Verifying Python Packages ==="
+        python -c "import requests; print('✅ requests')"
         python -c "from PIL import Image; print('✅ Pillow')"
         python -c "from moviepy.editor import ImageClip; print('✅ moviepy')"
         python -c "import pydub; print('✅ pydub')"
         python -c "import imageio; print('✅ imageio')"
+        python -c "import google.generativeai; print('✅ google-generativeai')"
+        echo ""
+        echo "=== Installed Versions ==="
+        pip show moviepy imageio imageio-ffmpeg Pillow | grep -E '^Name|^Version'
 
     - name: Verify existing chapter data
       run: |
@@ -151,8 +161,11 @@ jobs:
         echo "=== Python ==="
         python --version
         echo ""
-        echo "=== Packages ==="
-        pip list | grep -E "Pillow|moviepy|imageio|pydub" || echo "Packages not found"
+        echo "=== Pip version ==="
+        pip --version
+        echo ""
+        echo "=== Installed Packages ==="
+        pip list | grep -E "moviepy|imageio|Pillow|pydub|requests" || echo "Key packages not found"
         echo ""
         echo "=== FFmpeg ==="
         ffmpeg -version | head -3
