@@ -29,13 +29,13 @@ jobs:
     - name: Upgrade pip and install build tools
       run: |
         echo "🚀 Upgrading pip..."
-        python -m pip install --upgrade pip setuptools wheel
+        python3 -m pip install --upgrade pip setuptools wheel
         echo "✅ Pip upgraded"
 
     - name: Verify pip works
       run: |
         pip --version
-        python -m pip --version
+        python3 -m pip --version
 
     - name: Set up FFmpeg
       uses: FedericoCarboni/setup-ffmpeg@v3
@@ -69,31 +69,30 @@ jobs:
     - name: Show Python environment
       run: |
         echo "=== Python Info ==="
-        python --version
-        python -c "import sys; print(f'Python path: {sys.executable}')"
-        which python
+        python3 --version
+        python3 -c "import sys; print(f'Python path: {sys.executable}')"
         which python3
         echo ""
         echo "=== Pip Info ==="
         pip --version
-        python -m pip --version
+        python3 -m pip --version
 
     - name: Install requirements with verbose output
       run: |
         echo "🚀 Installing requirements..."
-        python -m pip install --verbose -r requirements.txt 2>&1 | tail -50
+        python3 -m pip install --verbose -r requirements.txt 2>&1 | tail -50
         echo ""
         echo "✅ Installation complete"
 
     - name: Verify all imports work
       run: |
         echo "🔍 Testing critical imports..."
-        python -c "import requests; print('  ✅ requests')"
-        python -c "import PIL; print('  ✅ PIL/Pillow')"
-        python -c "import moviepy; print('  ✅ moviepy')"
-        python -c "import pydub; print('  ✅ pydub')"
-        python -c "import imageio; print('  ✅ imageio')"
-        python -c "import google.generativeai; print('  ✅ google-generativeai')"
+        python3 -c "import requests; print('  ✅ requests')"
+        python3 -c "import PIL; print('  ✅ PIL/Pillow')"
+        python3 -c "import moviepy; print('  ✅ moviepy')"
+        python3 -c "import pydub; print('  ✅ pydub')"
+        python3 -c "import imageio; print('  ✅ imageio')"
+        python3 -c "import google.generativeai; print('  ✅ google-generativeai')"
         echo ""
         echo "=== All critical packages imported successfully ==="
 
@@ -105,14 +104,23 @@ jobs:
     - name: Verify chapter data
       run: |
         echo "🔍 Checking chapter data..."
-        [ -d "chapters/chapter_01" ] || (echo "❌ ERROR: chapters/chapter_01 not found"; exit 1)
+        if [ ! -d "chapters/chapter_01" ]; then
+          echo "❌ ERROR: chapters/chapter_01 not found"
+          exit 1
+        fi
         echo "✅ chapters/chapter_01 exists"
         
-        [ -f "chapters/chapter_01/audio.wav" ] || [ -f "chapters/chapter_01/audio.mp3" ] || (echo "❌ ERROR: No audio file found"; exit 1)
+        if [ ! -f "chapters/chapter_01/audio.wav" ] && [ ! -f "chapters/chapter_01/audio.mp3" ]; then
+          echo "❌ ERROR: No audio file found"
+          exit 1
+        fi
         echo "✅ Audio file found"
         
         IMAGE_COUNT=$(find chapters/chapter_01/images -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' \) 2>/dev/null | wc -l)
-        [ "$IMAGE_COUNT" -gt 0 ] || (echo "❌ ERROR: No images found"; exit 1)
+        if [ "$IMAGE_COUNT" -lt 1 ]; then
+          echo "❌ ERROR: No images found"
+          exit 1
+        fi
         echo "✅ Found $IMAGE_COUNT images"
 
     - name: Show chapter structure
@@ -125,20 +133,29 @@ jobs:
 
     - name: Validate Python syntax
       run: |
-        python -m py_compile assemble_video.py
+        python3 -m py_compile assemble_video.py
         echo "✅ Syntax check passed"
 
     - name: Run video assembly
       run: |
         echo "🚀 Starting video assembly..."
-        python assemble_video.py
+        python3 assemble_video.py
+        if [ $? -ne 0 ]; then
+          echo "❌ Video assembly failed with exit code $?"
+          exit 1
+        fi
         echo "✅ Video assembly complete"
 
     - name: Verify MP4 output
       run: |
         echo "🔍 Checking for MP4 files..."
-        ls -lh *.mp4 2>/dev/null || (echo "❌ ERROR: No MP4 files created"; exit 1)
-        echo "✅ MP4 files verified"
+        MP4_COUNT=$(ls -1 *.mp4 2>/dev/null | wc -l)
+        if [ "$MP4_COUNT" -lt 1 ]; then
+          echo "❌ ERROR: No MP4 files created"
+          exit 1
+        fi
+        echo "✅ Found $MP4_COUNT MP4 file(s)"
+        ls -lh *.mp4
 
     - name: Upload artifacts
       if: success()
@@ -154,8 +171,8 @@ jobs:
         echo "❌ WORKFLOW FAILED - Diagnostics:"
         echo ""
         echo "=== Python ==="
-        python --version
-        which python
+        python3 --version
+        which python3
         echo ""
         echo "=== Pip ==="
         pip --version
@@ -164,7 +181,7 @@ jobs:
         pip list 2>&1 | head -40
         echo ""
         echo "=== Try importing requests directly ==="
-        python -c "import sys; print('Python path:', sys.path); import requests; print('✅ requests imported')" || echo "❌ Failed to import requests"
+        python3 -c "import sys; print('Python path:', sys.path); import requests; print('✅ requests imported')" || echo "❌ Failed to import requests"
         echo ""
         echo "=== FFmpeg ==="
         ffmpeg -version | head -5
