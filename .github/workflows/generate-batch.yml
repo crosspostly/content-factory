@@ -52,7 +52,7 @@ jobs:
           cache-dependency-path: 'requirements.txt'
       
       - name: Cache system dependencies
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: ffmpeg imagemagick ghostscript fonts-dejavu-core libsm6 libxext6
           version: 1.0
