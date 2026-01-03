@@ -46,7 +46,6 @@ jobs:
           libfreetype6-dev \
           libjpeg-dev \
           libopenjp2-7-dev \
-          libopenjp2-7-dev \
           libtiff-dev \
           libwebp-dev \
           zlib1g-dev
@@ -181,8 +180,9 @@ EOF
     - name: 🎬 Assemble video
       id: build
       run: |
+        set -e
         echo "Starting video assembly..."
-        python assemble_video.py
+        python3 assemble_video.py
         
         # Find generated MP4 files
         video_files=$(find . -maxdepth 1 -name '*.mp4' -type f | tr '\n' ',' | sed 's/,$//')
