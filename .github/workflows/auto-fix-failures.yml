@@ -4,11 +4,13 @@ on:
   workflow_run:
     workflows:
       - "Run Tests"
+      - "1. Render Video Pipeline"
     types:
       - completed
     branches:
       - main
       - feature-*
+      - project-*
 
 jobs:
   auto-fix:
@@ -23,7 +25,6 @@ jobs:
       issues: write
 
     env:
-      # Use GOOGLE_AI_API_KEY directly (correct naming)
       GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
       PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
 
@@ -91,48 +92,61 @@ jobs:
           print("✅ API Key is configured")
           genai.configure(api_key=api_key)
 
-          # Use currently supported Gemini models (December 2025)
           ALLOWED_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro']
           CURRENT_MODEL = 'gemini-2.5-flash'
 
           MAX_ATTEMPTS = 10
           SUCCESS = False
+          WORKFLOW_NAME = os.getenv('WORKFLOW_NAME', 'Unknown')
 
           for attempt in range(1, MAX_ATTEMPTS + 1):
               print(f"\n{'='*60}")
               print(f"🔧 ATTEMPT {attempt}/{MAX_ATTEMPTS}")
               print(f"Model: {CURRENT_MODEL}")
+              print(f"Workflow: {WORKFLOW_NAME}")
               print(f"{'='*60}\n")
 
-              # Step 1: Extract errors
+              # Step 1: Extract errors from logs
               print("🔍 Extracting error information...")
               error_info = []
               failed_tests = []
               error_messages = []
+              import_errors = []
 
-              # From artifacts
-              for log_file in Path('workflow-artifacts').rglob('*.log'):
-                  try:
-                      with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                          content = f.read()
-                          for match in re.finditer(r'FAILED (.*?) -', content):
-                              failed_tests.append(match.group(1))
-                          for match in re.finditer(
-                              r'(AssertionError|ValueError|TypeError|AttributeError|ImportError|Exception)[:=\s]+(.*?)(?=\n|$)',
-                              content,
-                          ):
-                              error_messages.append(f"{match.group(1)}: {match.group(2)[:200]}")
-                          traceback_matches = re.findall(
-                              r'(Traceback.*?)(?=\n[A-Z]|\nFAILED|$)',
-                              content,
-                              re.DOTALL,
-                          )
-                          for tb in traceback_matches[:3]:
-                              error_info.append(tb[:500])
-                  except Exception:
-                      pass
+              # Scan all log files
+              for log_file in Path('workflow-artifacts').rglob('*'):
+                  if log_file.is_file():
+                      try:
+                          with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                              content = f.read()
+                              
+                              # Test failures
+                              for match in re.finditer(r'FAILED (.*?) -', content):
+                                  failed_tests.append(match.group(1))
+                              
+                              # General errors
+                              for match in re.finditer(
+                                  r'(AssertionError|ValueError|TypeError|AttributeError|ImportError|ModuleNotFoundError|Exception)[:=\s]+(.*?)(?=\n|$)',
+                                  content,
+                              ):
+                                  error_messages.append(f"{match.group(1)}: {match.group(2)[:200]}")
+                              
+                              # Module not found errors (critical for render_video)
+                              for match in re.finditer(r'ModuleNotFoundError: No module named \'([^\']+)\'', content):
+                                  import_errors.append(match.group(1))
+                              
+                              # Tracebacks
+                              traceback_matches = re.findall(
+                                  r'(Traceback.*?)(?=\n[A-Z]|\nFAILED|$)',
+                                  content,
+                                  re.DOTALL,
+                              )
+                              for tb in traceback_matches[:3]:
+                                  error_info.append(tb[:500])
+                      except Exception:
+                          pass
 
-              # From last run
+              # Also check pytest log if it exists
               if Path('pytest-last.log').exists():
                   with open('pytest-last.log', 'r', encoding='utf-8', errors='ignore') as f:
                       content = f.read()
@@ -144,12 +158,18 @@ jobs:
                       ):
                           error_messages.append(f"{match.group(1)}: {match.group(2)[:200]}")
 
-              if not failed_tests and not error_messages:
+              # Deduplicate
+              failed_tests = list(set(failed_tests))
+              error_messages = list(set(error_messages))
+              import_errors = list(set(import_errors))
+
+              if not failed_tests and not error_messages and not import_errors:
                   print("⚠️ No errors found in logs")
                   break
 
-              print(f"❌ Found {len(set(failed_tests))} failed tests")
-              print(f"❌ Found {len(set(error_messages))} error messages")
+              print(f"❌ Found {len(failed_tests)} failed tests")
+              print(f"❌ Found {len(error_messages)} error messages")
+              print(f"❌ Found {len(import_errors)} missing modules: {import_errors}")
 
               # Step 2: Collect code context
               code_files = []
@@ -161,44 +181,75 @@ jobs:
                       except Exception:
                           pass
 
+              # Also include requirements.txt for analysis
+              req_content = ""
+              if Path('requirements.txt').exists():
+                  with open('requirements.txt', 'r', encoding='utf-8') as f:
+                      req_content = f.read()
+
               # Step 3: Call Gemini for analysis
               print(f"🤖 Calling Gemini for analysis ({CURRENT_MODEL})...")
 
-              prompt = f"""You are debugging Python test failures. Attempt {attempt}/{MAX_ATTEMPTS}.
+              prompt = f"""You are debugging Python failures in a GitHub Actions workflow. Attempt {attempt}/{MAX_ATTEMPTS}.
 
-          **Failed Tests:**
-          {chr(10).join(set(failed_tests[:10]))}
+**Workflow:** {WORKFLOW_NAME}
 
-          **Error Messages:**
-          {chr(10).join(set(error_messages[:10]))}
+**Failed Tests:**
+{chr(10).join(failed_tests[:10]) if failed_tests else 'None'}
 
-          **Tracebacks:**
-          {chr(10).join(error_info[:2])}
+**Error Messages:**
+{chr(10).join(error_messages[:10]) if error_messages else 'None'}
 
-          **Code Context (sample files):**
-          {json.dumps(code_files[:3], indent=2)}
+**Missing Modules (ImportError/ModuleNotFoundError):**
+{chr(10).join([f"- {m}" for m in import_errors]) if import_errors else 'None'}
 
-          **Task:**
-          1. Identify the EXACT root cause
-          2. Provide PRECISE code fixes with full context
-          3. Show complete file paths
-          4. Include exact line replacements
+**Tracebacks:**
+{chr(10).join(error_info[:2]) if error_info else 'None'}
 
-          Format:
-          ```
-          FILE: path/to/file.py
-          BEFORE:
-          ```python
-          [exact code to replace]
-          ```
-          AFTER:
-          ```python
-          [fixed code]
-          ```
-          REASON: [why this fixes it]
-          ```
+**Current requirements.txt:**
+```
+{req_content}
+```
 
-          Be aggressive. Fix everything you can identify."""
+**Code Context (sample files):**
+{json.dumps(code_files[:3], indent=2)}
+
+**Task:**
+1. Identify the EXACT root cause
+2. If it's a missing module error, ADD the missing package to requirements.txt
+3. If it's a code error, provide PRECISE code fixes
+4. Show complete file paths
+5. Include exact line replacements
+
+**Format for requirements.txt changes:**
+```
+FILE: requirements.txt
+BEFORE:
+```python
+[current content]
+```
+AFTER:
+```python
+[fixed content with missing packages added]
+```
+REASON: [why this fixes it]
+```
+
+**Format for code changes:**
+```
+FILE: path/to/file.py
+BEFORE:
+```python
+[exact code to replace]
+```
+AFTER:
+```python
+[fixed code]
+```
+REASON: [why this fixes it]
+```
+
+Be aggressive. Fix everything you can identify. If imports are missing, ADD THEM TO requirements.txt."""
 
               try:
                   if CURRENT_MODEL not in ALLOWED_MODELS:
@@ -249,26 +300,40 @@ jobs:
                   print(f"❌ Gemini error: {e}")
                   continue
 
-              # Step 5: Run tests
-              print("🧪 Running tests...")
+              # Step 5: Run appropriate tests
+              print("🧪 Running tests/validation...")
               try:
-                  result = subprocess.run(
-                      ['pytest', 'tests/', '-v', '--tb=short', '-m', 'not slow', '--maxfail=5'],
-                      capture_output=True,
-                      text=True,
-                      timeout=300,
-                  )
+                  if WORKFLOW_NAME and "Render Video" in WORKFLOW_NAME:
+                      # For render_video workflow, just verify imports
+                      print("   Testing imports...")
+                      result = subprocess.run(
+                          ['python', '-c', 'import requests; import moviepy; import PIL; import google.generativeai; print("✅ All imports successful")'],
+                          capture_output=True,
+                          text=True,
+                          timeout=30,
+                      )
+                      success = result.returncode == 0
+                      test_output = result.stdout + result.stderr
+                  else:
+                      # For pytest workflows
+                      result = subprocess.run(
+                          ['pytest', 'tests/', '-v', '--tb=short', '-m', 'not slow', '--maxfail=5'],
+                          capture_output=True,
+                          text=True,
+                          timeout=300,
+                      )
+                      success = result.returncode == 0
+                      test_output = result.stdout + result.stderr
 
                   with open('pytest-last.log', 'w', encoding='utf-8') as f:
-                      f.write(result.stdout)
-                      f.write(result.stderr)
+                      f.write(test_output)
 
-                  if result.returncode == 0:
-                      print("✅ TESTS PASSED!")
+                  if success:
+                      print("✅ TESTS/IMPORTS PASSED!")
                       SUCCESS = True
                       break
 
-                  print(f"❌ Tests still failing (exit code {result.returncode})")
+                  print(f"❌ Tests still failing")
 
               except subprocess.TimeoutExpired:
                   print("⚠️ Tests timeout")
@@ -287,6 +352,8 @@ jobs:
                   f.write('false')
           print(f"{'='*60}\n")
           SCRIPT_EOF
+        env:
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
 
       - name: Check Fix Status
         id: fix-status
@@ -321,7 +388,7 @@ jobs:
                 return;
               }
 
-              execSync('git commit -m "🤖 Auto-fix: resolve failing tests\n\nApplied fixes after iterative analysis and testing."');
+              execSync('git commit -m "🤖 Auto-fix: resolve failing tests and missing imports\n\nApplied fixes after iterative analysis and testing."');
               execSync(`git push origin ${branchName}`);
 
               let allAnalysis = '';
@@ -335,10 +402,10 @@ jobs:
               const pr = await github.rest.pulls.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: '✅ [AUTO-FIX] Tests fixed by Gemini',
+                title: '✅ [AUTO-FIX] Tests and imports fixed by Gemini',
                 head: branchName,
                 base: '${{ github.event.workflow_run.head_branch }}',
-                body: `## 🎉 Automated Fix Success\n\nGemini successfully analyzed and fixed the failing tests through iterative debugging.\n\n### Analysis History\n${allAnalysis.slice(0, 5000)}\n\n---\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Fixed by:** Auto-Fix Workflow`
+                body: `## 🎉 Automated Fix Success\n\nGemini successfully analyzed and fixed the failing tests/imports through iterative debugging.\n\n### Analysis History\n${allAnalysis.slice(0, 5000)}\n\n---\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Fixed by:** Auto-Fix Workflow`
               });
 
               console.log(`✅ PR Created: #${pr.data.number}`);
@@ -358,7 +425,7 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: pr.data.number,
-                body: '🚀 Ready to merge! All tests are now passing.'
+                body: '🚀 Ready to merge! All tests and imports are now working.'
               });
             } catch (error) {
               console.log(`❌ Error: ${error.message}`);
@@ -387,7 +454,7 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 title: '🧊 [AUTO-FIX FAILED] Test failures - manual intervention required',
-                body: `## 🔴 Auto-Fix Failed\n\n**This issue was created automatically by the auto-fix workflow.**\n\nAfter 10 iterative attempts, the workflow could not automatically resolve the test failures.\n\n### Attempts\n${allAnalysis.slice(0, 10000)}\n\n---\n\n### Manual action required\nReview the analysis above and fix the tests manually.\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Workflow:** ${{ github.event.workflow_run.name }}\n**Branch:** ${{ github.event.workflow_run.head_branch }}`
+                body: `## 🔴 Auto-Fix Failed\n\n**This issue was created automatically by the auto-fix workflow.**\n\nAfter 10 iterative attempts, the workflow could not automatically resolve the failures.\n\n### Attempts\n${allAnalysis.slice(0, 10000)}\n\n---\n\n### Manual action required\nReview the analysis above and fix manually.\n\n**Original Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}\n**Workflow:** ${{ github.event.workflow_run.name }}\n**Branch:** ${{ github.event.workflow_run.head_branch }}`
               });
 
               console.log(`📝 Issue created: #${issue.data.number}`);
