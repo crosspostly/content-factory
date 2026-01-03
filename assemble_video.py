@@ -257,6 +257,8 @@ class VideoAssembler:
                 fps=self.fps,
                 codec='libx264',
                 audio_codec='aac',
+                preset='ultrafast',
+                threads=4,
                 verbose=False,
                 logger=None,
             )
