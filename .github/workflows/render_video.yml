@@ -1,13 +1,16 @@
 
-name: Render Video (No Requests)
+name: Render Video (Auto-Push)
 
 on:
   workflow_dispatch:
     inputs:
       job_branch:
         description: 'Branch containing source_materials.zip'
-        required: true
+        required: false
         type: string
+  push:
+    branches:
+      - 'job-*'  # Automatically trigger when a job branch is pushed
 
 permissions:
   contents: write
@@ -19,10 +22,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Job Branch
+      - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.job_branch }}
           fetch-depth: 0
 
       # SYSTEM DEPENDENCIES
@@ -37,7 +39,7 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      # INSTALL PILLOW ONLY - REQUESTS IS GONE
+      # INSTALL LIBRARIES
       - name: Install Python Libraries
         run: |
           python -m pip install --upgrade pip
@@ -56,7 +58,8 @@ jobs:
             unzip -o source_materials.zip
             echo "✅ Unzipped successfully"
           else
-            echo "❌ source_materials.zip not found!"
+            echo "❌ source_materials.zip not found! Checking if checkout failed..."
+            ls -R
             exit 1
           fi
 
