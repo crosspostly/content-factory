@@ -1,25 +1,19 @@
 name: Rutube Sync & Upload
 
 on:
-  workflow_dispatch: # Кнопка ручного запуска
+  workflow_dispatch:
   schedule:
-    - cron: '0 */4 * * *' # Каждые 4 часа
+    - cron: '0 */4 * * *'
 
 jobs:
   sync-and-upload:
     runs-on: ubuntu-latest
     
-    env:
-      RUTUBE_LOGIN: ${{ secrets.RUTUBE_LOGIN }}
-      RUTUBE_PASSWORD: ${{ secrets.RUTUBE_PASSWORD }}
-      YOUTUBE_CHANNEL_URL: ${{ secrets.YOUTUBE_CHANNEL_URL }}
-      FORCE_CATBOX: "true" # Включаем Catbox, так как локальный сервер недоступен
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Node.js (for yt-dlp challenge solving)
+      - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 18
@@ -30,10 +24,15 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
 
-      - name: Install Dependencies
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests git+https://github.com/yt-dlp/yt-dlp.git
+          pip install requests yt-dlp
 
       - name: Create Cookie Files
         env:
@@ -44,5 +43,16 @@ jobs:
 
       - name: Run Sync Script
         working-directory: video/rutube
+        env:
+          RUTUBE_LOGIN: ${{ secrets.RUTUBE_LOGIN }}
+          RUTUBE_PASSWORD: ${{ secrets.RUTUBE_PASSWORD }}
+          YOUTUBE_CHANNEL_URL: ${{ secrets.YOUTUBE_CHANNEL_URL }}
+          FORCE_CATBOX: "true"
         run: |
+          # Проверяем окружение
+          node -v
+          ffmpeg -version | head -n 1
+          yt-dlp --version
+          
+          # Запуск основного скрипта
           python test_final.py
