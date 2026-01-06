@@ -33,7 +33,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests yt-dlp
+          pip install requests git+https://github.com/yt-dlp/yt-dlp.git
 
       - name: Create Cookie Files
         env:
