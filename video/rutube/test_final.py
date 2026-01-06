@@ -50,15 +50,29 @@ def run_test():
         return
     log(f"✅ Auth Token: {token[:10]}...******")
 
-    # 1. Get List
+    # 1. Get List (Robust)
     log("Fetching video list from YouTube...")
-    cmd = [config.YT_DLP_PATH, "--cookies", COOKIES_FILE, "--get-id", "--get-title", "--flat-playlist", "--playlist-end", "5", YOUTUBE_CHANNEL_URL] # Check top 5
+    
+    # Anti-bot flags
+    ytdlp_args = [
+        config.YT_DLP_PATH,
+        "--no-check-certificate",
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "--extractor-args", "youtube:player_client=android,web,ios", # Try multiple clients
+        "--cookies", COOKIES_FILE
+    ]
+
+    cmd = ytdlp_args + ["--get-id", "--get-title", "--flat-playlist", "--playlist-end", "5", YOUTUBE_CHANNEL_URL] 
     log(f"🔍 Executing CMD: {' '.join(cmd)}")
     
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
         log(f"❌ yt-dlp list error: {res.stderr}")
-        return
+        # Retry with simpler args if failed
+        cmd_simple = [config.YT_DLP_PATH, "--cookies", COOKIES_FILE, "--get-id", "--get-title", "--flat-playlist", "--playlist-end", "5", YOUTUBE_CHANNEL_URL]
+        res = subprocess.run(cmd_simple, capture_output=True, text=True)
+        if res.returncode != 0:
+             return
 
     lines = res.stdout.strip().split("\n")
     if len(lines) < 2:
@@ -66,7 +80,8 @@ def run_test():
         log(f"Stdout: {res.stdout}")
         return
 
-    # Find first unsynced video
+    # ... (Target selection logic) ...
+    # (Copying selection logic from previous response)
     target_video = None
     for i in range(0, len(lines), 2):
         if i+1 >= len(lines): break
@@ -97,8 +112,6 @@ def run_test():
     youtube_url = f"https://youtube.com/watch?v={y_id}"
     upload_url = None
 
-    # ... (Direct Link and Fallback logic same as before, ensuring local_filename uses y_id)
-    
     # 3. Fallback: Download & Serve -> Upload to Catbox
     if not upload_url:
         log("⚠️ Direct link failed/blocked. Switching to Download + Catbox Upload...")
@@ -109,7 +122,8 @@ def run_test():
         
         # Check if exists
         if not os.path.exists(local_path):
-            cmd_dl = [config.YT_DLP_PATH, "--cookies", COOKIES_FILE, "-f", "best[ext=mp4]/best", "-o", local_path, youtube_url]
+            # ROBUST DOWNLOAD COMMAND
+            cmd_dl = ytdlp_args + ["-f", "best[ext=mp4]/best", "-o", local_path, youtube_url]
             log(f"⬇️ Downloading CMD: {' '.join(cmd_dl)}")
             
             res_dl = subprocess.run(cmd_dl, capture_output=True, text=True)
