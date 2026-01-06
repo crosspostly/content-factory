@@ -50,27 +50,16 @@ def run_test():
         return
     log(f"✅ Auth Token: {token[:10]}...******")
 
-    # --- DYNAMIC SOURCE CONFIGURATION ---
-    source_type = os.environ.get('VIDEO_SOURCE', 'youtube').lower()
-    custom_channel_url = os.environ.get('CHANNEL_URL', None)
-
-    if source_type == 'vk':
-        log("SOURCE: VK")
-        channel_url = custom_channel_url or config.VK_CHANNEL_URL
-        cookies_file = os.path.join(os.path.dirname(__file__), "vk_cookies.txt")
-        base_video_url = "https://vk.com/video/"
-    else:
-        log("SOURCE: YouTube")
-        channel_url = custom_channel_url or config.YOUTUBE_CHANNEL_URL
-        cookies_file = COOKIES_FILE # From original config
-        base_video_url = "https://youtube.com/watch?v="
-    
     # 1. Get List (Robust)
     log(f"Fetching video list from {channel_url}...")
     
+    # Anti-bot flags (YouTube specific, will be adapted for VK if needed)
     ytdlp_args = [
         config.YT_DLP_PATH,
-        "--cookies", cookies_file
+        "--no-check-certificate",
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "--extractor-args", "youtube:player_client=android,web,ios", # Try multiple clients
+        "--cookies", COOKIES_FILE # This will be YT cookies for YT, and empty for VK
     ]
 
     cmd = ytdlp_args + ["--get-id", "--get-title", "--flat-playlist", "--playlist-end", "5", channel_url] 
