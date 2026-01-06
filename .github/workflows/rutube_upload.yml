@@ -5,6 +5,9 @@ on:
   schedule:
     - cron: '0 */4 * * *'
 
+permissions:
+  contents: write
+
 jobs:
   sync-and-upload:
     runs-on: ubuntu-latest
@@ -56,3 +59,24 @@ jobs:
           
           # Запуск основного скрипта
           python test_final.py
+
+      - name: Commit Database Changes
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          
+          # Check if DB file exists and add it
+          if [ -f "video/rutube/sync_db.sqlite" ]; then
+            git add video/rutube/sync_db.sqlite
+            
+            # Commit and push if changed
+            if ! git diff --cached --quiet; then
+              git commit -m "Update sync database [skip ci]"
+              git push
+              echo "✅ Database updated and pushed."
+            else
+              echo "ℹ️ No database changes to commit."
+            fi
+          else
+            echo "⚠️ Database file not found."
+          fi

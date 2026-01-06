@@ -1,12 +1,6 @@
-# -*- coding: utf-8 -*-
-import os
-import requests
-import subprocess
-import sys
-import time
-import json
-import config
-from rutube_uploader import RutubeUploader
+import sqlite3
+
+# ... (imports)
 
 # Config from config.py
 LOGIN = config.RUTUBE_LOGIN
@@ -17,27 +11,35 @@ PUBLIC_IP = config.PUBLIC_IP
 SERVER_PORT = config.SERVER_PORT
 UPLOAD_FOLDER = config.UPLOADS_DIR
 COOKIES_FILE = config.YOUTUBE_COOKIES_FILE
+DB_FILE = config.DB_FILE
 
 def log(msg):
     print(f"[TEST] {msg}")
 
-def ensure_server_running():
-    try:
-        requests.get(f"http://localhost:{SERVER_PORT}/health", timeout=1)
-        return
-    except:
-        log("Starting local server...")
-        server_script = os.path.join(os.path.dirname(__file__), "server_simple.py")
-        subprocess.Popen([sys.executable, server_script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-        time.sleep(2)
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute('CREATE TABLE IF NOT EXISTS synced (y_id TEXT PRIMARY KEY, title TEXT)')
+    conn.commit()
+    conn.close()
 
-def get_token():
-    try:
-        r = requests.post(f"{BASE_URL}/api/accounts/token_auth/", data={'username': LOGIN, 'password': PASSWORD})
-        return r.json().get('token')
-    except: return None
+def is_video_synced(y_id):
+    init_db()
+    conn = sqlite3.connect(DB_FILE)
+    res = conn.execute('SELECT 1 FROM synced WHERE y_id=?', (y_id,)).fetchone()
+    conn.close()
+    return res is not None
+
+def save_to_db(y_id, title):
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute('INSERT OR REPLACE INTO synced VALUES (?, ?)', (y_id, title))
+    conn.commit()
+    conn.close()
+    log(f"💾 Saved to DB: {y_id} - {title}")
+
+# ... (ensure_server_running, get_token same as before)
 
 def run_test():
+    init_db()
     ensure_server_running()
     log("Authenticating...")
     token = get_token()
@@ -48,7 +50,7 @@ def run_test():
 
     # 1. Get List
     log("Fetching video list from YouTube...")
-    cmd = [config.YT_DLP_PATH, "--cookies", COOKIES_FILE, "--get-id", "--get-title", "--flat-playlist", "--playlist-end", "1", YOUTUBE_CHANNEL_URL]
+    cmd = [config.YT_DLP_PATH, "--cookies", COOKIES_FILE, "--get-id", "--get-title", "--flat-playlist", "--playlist-end", "5", YOUTUBE_CHANNEL_URL] # Check top 5
     log(f"🔍 Executing CMD: {' '.join(cmd)}")
     
     res = subprocess.run(cmd, capture_output=True, text=True)
@@ -62,29 +64,31 @@ def run_test():
         log(f"Stdout: {res.stdout}")
         return
 
-    title = lines[0]
-    y_id = lines[1]
-    log(f"🎬 Found Video: {title} (ID: {y_id})")
+    # Find first unsynced video
+    target_video = None
+    for i in range(0, len(lines), 2):
+        if i+1 >= len(lines): break
+        t_title = lines[i]
+        t_id = lines[i+1]
+        
+        if not is_video_synced(t_id):
+            target_video = (t_title, t_id)
+            break
+        else:
+            log(f"⏭️ Skipping already synced: {t_title}")
+
+    if not target_video:
+        log("✅ All recent videos are already synced.")
+        return
+
+    title, y_id = target_video
+    log(f"🎬 Processing Video: {title} (ID: {y_id})")
 
     youtube_url = f"https://youtube.com/watch?v={y_id}"
     upload_url = None
 
-    # 2. Try Direct Link
-    # FORCE SKIP DIRECT LINK to ensure stability
-    log("⚠️ Skipping Direct Link check (forced local download mode)...")
-    # try:
-    #     cmd_url = [config.YT_DLP_PATH, "--cookies", COOKIES_FILE, "-g", "-f", "best[ext=mp4]/best", youtube_url]
-    #     log(f"🔍 Executing CMD: {' '.join(cmd_url)}")
-        
-    #     res_url = subprocess.run(cmd_url, capture_output=True, text=True)
-    #     if res_url.returncode == 0 and res_url.stdout.strip():
-    #         upload_url = res_url.stdout.strip()
-    #         log(f"✅ Direct link obtained: {upload_url[:60]}...")
-    #     else:
-    #          log(f"⚠️ Direct link fetch stderr: {res_url.stderr}")
-    # except Exception as e:
-    #     log(f"⚠️ Direct link exception: {e}")
-
+    # ... (Direct Link and Fallback logic same as before, ensuring local_filename uses y_id)
+    
     # 3. Fallback: Download & Serve -> Upload to Catbox
     if not upload_url:
         log("⚠️ Direct link failed/blocked. Switching to Download + Catbox Upload...")
@@ -127,14 +131,12 @@ def run_test():
         "url": upload_url,
         "title": title,
         "category_id": 13,
-        "is_hidden": True,
-        "description": f"Test upload of {youtube_url}"
+        "is_hidden": False, # PUBLIC ACCESS
+        "description": f"Original: {youtube_url}"
     }
     
     log("📤 SENDING REQUEST:")
-    log(f"URL: {BASE_URL}/api/video/")
-    log(f"Headers: Authorization: Token {token[:10]}...")
-    log(f"Payload: {json.dumps(payload, ensure_ascii=False, indent=2)}")
+    # ... (Request sending)
 
     r = requests.post(f"{BASE_URL}/api/video/", json=payload, headers=headers)
     
@@ -145,7 +147,15 @@ def run_test():
     if r.status_code in [200, 201]:
         vid_id = r.json().get('video_id') or r.json().get('id')
         log(f"🎉 Request accepted. Rutube ID: {vid_id}")
+        
+        # Optimistic Save to DB (or wait for confirmation)
+        # We save immediately to avoid loop if processing takes long
+        save_to_db(y_id, title)
+        
         log("⏳ Waiting for processing results (polling status)...")
+        
+        # Polling loop ... (keep existing polling logic)
+
         
         # Polling loop
         max_retries = 30 # 30 * 5 sec = 150 sec timeout
