@@ -50,19 +50,30 @@ def run_test():
         return
     log(f"✅ Auth Token: {token[:10]}...******")
 
-    # 1. Get List (Robust)
-    log("Fetching video list from YouTube...")
+    # --- DYNAMIC SOURCE CONFIGURATION ---
+    source_type = os.environ.get('VIDEO_SOURCE', 'youtube').lower()
+    custom_channel_url = os.environ.get('CHANNEL_URL', None)
+
+    if source_type == 'vk':
+        log("SOURCE: VK")
+        channel_url = custom_channel_url or config.VK_CHANNEL_URL
+        cookies_file = os.path.join(os.path.dirname(__file__), "vk_cookies.txt")
+        base_video_url = "https://vk.com/video/"
+    else:
+        log("SOURCE: YouTube")
+        channel_url = custom_channel_url or config.YOUTUBE_CHANNEL_URL
+        cookies_file = COOKIES_FILE # From original config
+        base_video_url = "https://youtube.com/watch?v="
     
-    # Anti-bot flags
+    # 1. Get List (Robust)
+    log(f"Fetching video list from {channel_url}...")
+    
     ytdlp_args = [
         config.YT_DLP_PATH,
-        "--no-check-certificate",
-        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "--extractor-args", "youtube:player_client=android,web,ios", # Try multiple clients
-        "--cookies", COOKIES_FILE
+        "--cookies", cookies_file
     ]
 
-    cmd = ytdlp_args + ["--get-id", "--get-title", "--flat-playlist", "--playlist-end", "5", YOUTUBE_CHANNEL_URL] 
+    cmd = ytdlp_args + ["--get-id", "--get-title", "--flat-playlist", "--playlist-end", "5", channel_url] 
     log(f"🔍 Executing CMD: {' '.join(cmd)}")
     
     res = subprocess.run(cmd, capture_output=True, text=True)
@@ -98,7 +109,7 @@ def run_test():
         log("✅ All recent videos are already synced.")
         return
 
-    title, y_id = target_video
+    title, source_id = target_video
     
     # Добавляем идентификатор среды к названию + уникальный код запуска
     import random, string
@@ -107,9 +118,9 @@ def run_test():
     
     title = f"{env_tag} {title}"
     
-    log(f"🎬 Processing Video: {title} (ID: {y_id})")
+    log(f"🎬 Processing Video: {title} (ID: {source_id})")
 
-    youtube_url = f"https://youtube.com/watch?v={y_id}"
+    source_url = f"{base_video_url}{source_id}"
     upload_url = None
 
     # 3. Fallback: Download & Serve -> Upload to Catbox
@@ -117,13 +128,13 @@ def run_test():
         log("⚠️ Direct link failed/blocked. Switching to Download + Catbox Upload...")
         if not os.path.exists(UPLOAD_FOLDER): os.makedirs(UPLOAD_FOLDER)
         
-        local_filename = f"{y_id}.mp4"
+        local_filename = f"{source_id}.mp4"
         local_path = os.path.join(UPLOAD_FOLDER, local_filename)
         
         # Check if exists
         if not os.path.exists(local_path):
             # ROBUST DOWNLOAD COMMAND
-            cmd_dl = ytdlp_args + ["-f", "best[ext=mp4]/best", "-o", local_path, youtube_url]
+            cmd_dl = ytdlp_args + ["-f", "best[ext=mp4]/best", "-o", local_path, source_url]
             log(f"⬇️ Downloading CMD: {' '.join(cmd_dl)}")
             
             res_dl = subprocess.run(cmd_dl, capture_output=True, text=True)
@@ -156,7 +167,7 @@ def run_test():
         "title": title,
         "category_id": 13,
         "is_hidden": False, # PUBLIC ACCESS
-        "description": f"Original: {youtube_url}"
+        "description": f"Original: {source_url}"
     }
     
     log("📤 SENDING REQUEST:")
@@ -174,7 +185,7 @@ def run_test():
         
         # Optimistic Save to DB (or wait for confirmation)
         # We save immediately to avoid loop if processing takes long
-        save_to_db(y_id, title)
+        save_to_db(source_id, title)
         
         log("⏳ Waiting for processing results (polling status)...")
         

@@ -2,6 +2,19 @@ name: Rutube Sync & Upload
 
 on:
   workflow_dispatch:
+    inputs:
+      source:
+        description: 'Video source'
+        required: true
+        default: 'youtube'
+        type: choice
+        options:
+        - youtube
+        - vk
+      channel_url:
+        description: 'URL of the channel (optional)'
+        required: false
+        type: string
   schedule:
     - cron: '0 */4 * * *'
 
@@ -44,12 +57,20 @@ jobs:
           # pycryptodomex is critical for some YouTube algorithms
           pip install requests pycryptodomex git+https://github.com/yt-dlp/yt-dlp.git
 
-      - name: Create Cookie Files
+      - name: Create YT Cookie Files
+        if: ${{ github.event.inputs.source == 'youtube' || github.event_name == 'schedule' }}
         env:
           YT_COOKIES: ${{ secrets.YOUTUBE_COOKIES_CONTENT }}
           RT_COOKIES: ${{ secrets.RUTUBE_COOKIES_CONTENT }}
         run: |
           python -c "import os; open('video/rutube/youtube_cookies.txt', 'w').write(os.environ.get('YT_COOKIES', '')); open('video/rutube/rutube_cookies.json', 'w').write(os.environ.get('RT_COOKIES', ''))"
+
+      - name: Create VK Cookie File
+        if: ${{ github.event.inputs.source == 'vk' }}
+        env:
+          VK_COOKIES: ${{ secrets.VK_COOKIES_CONTENT }}
+        run: |
+          python -c "import os; open('video/rutube/vk_cookies.txt', 'w').write(os.environ.get('VK_COOKIES', ''))"
 
       - name: Run Sync Script
         working-directory: video/rutube
@@ -57,7 +78,11 @@ jobs:
           RUTUBE_LOGIN: ${{ secrets.RUTUBE_LOGIN }}
           RUTUBE_PASSWORD: ${{ secrets.RUTUBE_PASSWORD }}
           YOUTUBE_CHANNEL_URL: ${{ secrets.YOUTUBE_CHANNEL_URL }}
+          VK_CHANNEL_URL: ${{ secrets.VK_CHANNEL_URL }}
           FORCE_CATBOX: "true"
+          # Pass workflow inputs to the script
+          VIDEO_SOURCE: ${{ github.event.inputs.source || 'youtube' }}
+          CHANNEL_URL: ${{ github.event.inputs.channel_url || '' }}
         run: |
           # Проверяем окружение
           node -v
