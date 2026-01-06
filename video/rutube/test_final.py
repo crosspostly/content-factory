@@ -82,6 +82,11 @@ def run_test():
         return
 
     title, y_id = target_video
+    
+    # Добавляем идентификатор среды к названию
+    env_tag = "[GHA]" if os.environ.get("FORCE_CATBOX") == "true" else "[Local]"
+    title = f"{env_tag} {title}"
+    
     log(f"🎬 Processing Video: {title} (ID: {y_id})")
 
     youtube_url = f"https://youtube.com/watch?v={y_id}"
