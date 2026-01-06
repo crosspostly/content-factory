@@ -31,11 +31,11 @@ jobs:
           pip install requests yt-dlp
 
       - name: Create Cookie Files
+        env:
+          YT_COOKIES: ${{ secrets.YOUTUBE_COOKIES_CONTENT }}
+          RT_COOKIES: ${{ secrets.RUTUBE_COOKIES_CONTENT }}
         run: |
-          # Создаем файлы куки из секретов
-          # Если секреты пустые, файлы будут пустыми (скрипт должен это пережить)
-          echo "${{ secrets.YOUTUBE_COOKIES_CONTENT }}" > video/rutube/youtube_cookies.txt
-          echo "${{ secrets.RUTUBE_COOKIES_CONTENT }}" > video/rutube/rutube_cookies.json
+          python -c "import os; open('video/rutube/youtube_cookies.txt', 'w').write(os.environ.get('YT_COOKIES', '')); open('video/rutube/rutube_cookies.json', 'w').write(os.environ.get('RT_COOKIES', ''))"
 
       - name: Run Sync Script
         working-directory: video/rutube
