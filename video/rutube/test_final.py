@@ -83,8 +83,11 @@ def run_test():
 
     title, y_id = target_video
     
-    # Добавляем идентификатор среды к названию
-    env_tag = "[GHA]" if os.environ.get("FORCE_CATBOX") == "true" else "[Local]"
+    # Добавляем идентификатор среды к названию + уникальный код запуска
+    import random, string
+    run_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+    env_tag = f"[GHA-{run_id}]" if os.environ.get("FORCE_CATBOX") == "true" else f"[Local-{run_id}]"
+    
     title = f"{env_tag} {title}"
     
     log(f"🎬 Processing Video: {title} (ID: {y_id})")
