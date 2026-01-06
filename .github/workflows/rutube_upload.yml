@@ -1,0 +1,43 @@
+name: Rutube Sync & Upload
+
+on:
+  workflow_dispatch: # Кнопка ручного запуска
+  schedule:
+    - cron: '0 */4 * * *' # Каждые 4 часа
+
+jobs:
+  sync-and-upload:
+    runs-on: ubuntu-latest
+    
+    env:
+      RUTUBE_LOGIN: ${{ secrets.RUTUBE_LOGIN }}
+      RUTUBE_PASSWORD: ${{ secrets.RUTUBE_PASSWORD }}
+      YOUTUBE_CHANNEL_URL: ${{ secrets.YOUTUBE_CHANNEL_URL }}
+      FORCE_CATBOX: "true" # Включаем Catbox, так как локальный сервер недоступен
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests yt-dlp
+
+      - name: Create Cookie Files
+        run: |
+          # Создаем файлы куки из секретов
+          # Если секреты пустые, файлы будут пустыми (скрипт должен это пережить)
+          echo "${{ secrets.YOUTUBE_COOKIES_CONTENT }}" > video/rutube/youtube_cookies.txt
+          echo "${{ secrets.RUTUBE_COOKIES_CONTENT }}" > video/rutube/rutube_cookies.json
+
+      - name: Run Sync Script
+        working-directory: video/rutube
+        run: |
+          python test_final.py
