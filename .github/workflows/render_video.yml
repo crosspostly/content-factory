@@ -12,6 +12,12 @@ on:
     branches:
       - 'job-*'  # Automatically trigger when a job branch is pushed
 
+# Concurrency ensures that if we push multiple chunks, previous runs are cancelled
+# and only the final run (which sees all files) completes the job.
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
   actions: write
@@ -50,23 +56,38 @@ jobs:
           python --version
           python -m pip list
 
-      - name: Unpack Materials
+      - name: Unpack Materials (Smart Joiner)
         run: |
           echo "📂 Current Directory:"
           ls -lh
+          
+          # Check for split parts (source_materials.zip.001, .002, etc.)
+          if ls source_materials.zip.* 1> /dev/null 2>&1; then
+             echo "🧩 Found split archive parts. Combining..."
+             cat source_materials.zip.* > source_materials.zip
+             echo "✅ Combined $(ls source_materials.zip.* | wc -l) parts into source_materials.zip"
+             ls -lh source_materials.zip
+          fi
+
           if [ -f source_materials.zip ]; then
             unzip -o source_materials.zip
             echo "✅ Unzipped successfully"
           else
-            echo "❌ source_materials.zip not found! Checking if checkout failed..."
-            ls -R
-            exit 1
+            echo "⚠️ source_materials.zip not found (yet)."
+            echo "If you are uploading in chunks, the next push will trigger this workflow again."
+            # We exit successfully so the workflow doesn't show "Failure" while waiting for chunks
+            exit 0 
           fi
 
       - name: Run Assembler Script
         run: |
-          echo "🎬 Starting assemble_video.py..."
-          python assemble_video.py
+          if [ -f assemble_video.py ]; then
+             echo "🎬 Starting assemble_video.py..."
+             python assemble_video.py
+          else
+             echo "❌ assemble_video.py not found. Likely incomplete upload."
+             exit 1
+          fi
 
       - name: Verify Output
         run: |
